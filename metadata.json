@@ -1,5 +1,5 @@
 {
   "name": "Taxonomy Workbench",
-  "description": "Unified Biological Reference Tool combining Taxon Profiles, Identification Key, and Botanical Authorities.",
+  "description": "Unified Biological Reference Tool combining Explore Taxa, Identify Plants, Taxonomic Authorities, and Generate Guides.",
   "requestFramePermissions": []
 }

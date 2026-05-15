@@ -1,4 +1,4 @@
-export type ModuleType = 'profiles' | 'identify' | 'authorities' | 'guide' | 'landing';
+export type ModuleType = 'profiles' | 'identify' | 'authorities' | 'guide' | 'localities' | 'landing';
 
 export type NavigationTarget = {
   module: ModuleType;
@@ -11,6 +11,36 @@ export interface GroundingSource {
   title: string;
 }
 
+// --- Localities Module Types ---
+export interface LocalityProfile {
+  location_details: {
+    resolved_name: string;
+    coordinates_dms: string;
+    latitude?: number;
+    longitude?: number;
+  };
+  habitat_and_landscape: {
+    ecosystem_description: string;
+    climate: string;
+    soil_type: string;
+    elevation_range: string;
+    ecoregion: string;
+  };
+  geography_and_history: {
+    geographic_context: string;
+    historical_notes: string;
+    protected_status: string;
+  };
+  phenology: {
+    optimal_collecting_season: string;
+  };
+  taxa: {
+    dominant_species: string[];
+    endemic_and_notable: string[];
+  };
+  ecological_threats: string[];
+}
+
 // --- Profiles Module Types ---
 export interface ConfusedTaxon {
   name: string;
@@ -18,11 +48,25 @@ export interface ConfusedTaxon {
   keyFeature: string;
 }
 
+export interface TaxonClassification {
+  rank: string;
+  name: string;
+}
+
 export interface TaxonProfile {
   scientificName: string;
   author: string;
   commonName: string;
   family: string;
+  classification: TaxonClassification[];
+  includedTaxaCount?: string;
+  localIncludedTaxaCount?: string;
+  synonyms?: string[];
+  conservationStatus?: string;
+  hazards?: string;
+  fieldNotes?: string;
+  seasonality?: string;
+  humanRelevance?: string;
   quickRecap: string;
   diagnosticDescription: string;
   confusedTaxa: ConfusedTaxon[];
@@ -30,6 +74,7 @@ export interface TaxonProfile {
   etymology: string;
   history: string;
   distribution: string;
+  localityContext?: string;
 }
 
 export interface KeyDifference {
@@ -44,6 +89,7 @@ export interface ComparisonProfile {
   taxon2: TaxonProfile;
   taxon3?: TaxonProfile;
   keyDifferences: KeyDifference[];
+  localityContext?: string;
 }
 
 // --- Identify Module Types ---
@@ -116,4 +162,34 @@ export enum AppStatus {
 
 export interface GeneratedGuide {
   markdown: string;
+}
+
+export interface DichotomousKeyCouplet {
+  couplet_id: string;
+  lead_a: {
+    statement: string;
+    destination: string;
+  };
+  lead_b: {
+    statement: string;
+    destination: string;
+  };
+}
+
+export interface SpeciesProfile {
+  scientific_name: string;
+  common_name: string | null;
+  habitat_and_ecology: string;
+  key_diagnostics: string;
+}
+
+export interface GeneratedGuideStructured {
+  guide_metadata: {
+    target_taxon: string;
+    target_locality: string;
+    verification_summary: string;
+  };
+  taxon_overview: string;
+  species_profiles: SpeciesProfile[];
+  dichotomous_key: DichotomousKeyCouplet[];
 }

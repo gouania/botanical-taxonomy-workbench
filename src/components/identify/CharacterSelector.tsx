@@ -68,9 +68,17 @@ export function CharacterSelector({ selected, suggested, onToggle }: CharacterSe
 
                 return (
                   <div key={char.id} className="relative group">
-                    <button
+                    <div
                       onClick={() => onToggle(char.id)}
-                      className={`w-full flex items-center justify-between p-3 rounded-xl border transition-all text-left ${
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          onToggle(char.id);
+                        }
+                      }}
+                      role="button"
+                      tabIndex={0}
+                      className={`w-full flex items-center justify-between p-3 rounded-xl border transition-all text-left cursor-pointer ${
                         isSelected
                           ? 'bg-cyan-900/30 border-cyan-500/50 text-cyan-50'
                           : suggestionReason
@@ -102,7 +110,7 @@ export function CharacterSelector({ selected, suggested, onToggle }: CharacterSe
                           <Info size={14} />
                         </button>
                       </div>
-                    </button>
+                    </div>
 
                     {/* Explanation Tooltip */}
                     {explanation?.id === char.id && (

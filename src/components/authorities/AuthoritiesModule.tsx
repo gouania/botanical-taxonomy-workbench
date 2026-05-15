@@ -54,7 +54,7 @@ export function AuthoritiesModule({ initialQuery = '', onNavigate }: Authorities
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 animate-in fade-in duration-500">
       <div className="mb-8 print:hidden">
-        <h1 className="font-display text-3xl font-bold text-white mb-6">Botanical Authorities</h1>
+        <h1 className="font-display text-3xl font-bold text-white mb-6">Taxonomic Authorities</h1>
         <SearchInput
           value={query}
           onChange={setQuery}

@@ -141,7 +141,7 @@ export function IdentifyModule({ onNavigate }: IdentifyModuleProps) {
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 animate-in fade-in duration-500">
       <div className="mb-8 print:hidden">
-        <h1 className="font-display text-3xl font-bold text-white mb-2">Identification Key</h1>
+        <h1 className="font-display text-3xl font-bold text-white mb-2">Identify Plants</h1>
         <p className="text-slate-400">Select observed characters to identify the plant family.</p>
       </div>
 

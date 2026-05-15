@@ -41,12 +41,12 @@ export function InputPanel({ input, setInput, onGenerate, onClear, onSample, isL
         <textarea
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          placeholder="Describe the taxon or group you need a guide for. For example: 'Create an identification guide for the genus Acer (Maples) commonly found in the British Isles, focusing on leaf shape and samara angles...'"
+          placeholder="e.g. 'Create an identification guide to the following species, including a key, based on the descriptions provided here: [paste descriptions]' - or 'Write an identification guide, including a key, for maples (Acer) in the British Isles, focusing on how to tell them apart by their leaf shapes and samara angles.'"
           className="w-full flex-1 min-h-[200px] bg-slate-950/50 border border-slate-800 rounded-xl p-4 text-slate-200 placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500/50 transition-all resize-none mb-2"
           disabled={isLoading}
         />
         <div className="flex items-center justify-between text-xs text-slate-400 px-1">
-          <span>For best results, copy-paste your own descriptions directly.</span>
+          <span>For best results, copy and paste your own descriptions directly.</span>
           <button
             onClick={handlePaste}
             disabled={isLoading}

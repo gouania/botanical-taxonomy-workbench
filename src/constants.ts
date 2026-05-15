@@ -1,13 +1,27 @@
 import { Character } from './types';
 
 export const TAXON_EXAMPLES = [
+  'Tracheophyta', // Phylum
   'Magnoliopsida', // Class
+  'Caryophyllales', // Order
   'Asteraceae', // Family
+  'Asteroideae', // Subfamily
   'Eupatorieae', // Tribe
+  'Quercus sect. Lobatae', // Section
   'Quercus', // Genus
   'Acer saccharum', // Species
+  'Pinus longaeva', // Gymnosperm
+  'Ginkgo biloba', // Gymnosperm
   'Pteridium aquilinum', // Fern species
+  'Lycopodium clavatum', // Lycophyte
   'Sphagnum', // Moss genus
+  'Marchantia polymorpha', // Liverwort
+  'Drosera capensis', // Carnivorous
+  'Rafflesia arnoldii', // Parasitic
+  'Monotropa uniflora', // Mycoheterotroph
+  'Triticum aestivum', // Crop
+  'Amanita muscaria', // Fungi
+  'Macrocystis pyrifera', // Brown algae
 ];
 
 export const AUTHOR_EXAMPLES = [
@@ -185,6 +199,6 @@ export const CHARACTER_GROUPS = [
 
 export const APP_NAME = "Botanical Taxonomy Workbench Beta";
 export const GEMINI_MODEL = "gemini-3-flash-preview";
-export const SAMPLE_DATA = "Provide a detailed identification guide for the genus Quercus (Oaks), focusing on leaf morphology, acorn characteristics, and bark patterns. Include a dichotomous key for common species in the Northeastern United States.";
+export const SAMPLE_DATA = "Write an identification guide, including a key, for maples (Acer) in the British Isles, focusing on how to tell them apart by their leaf shapes and samara angles.";
 export const SYSTEM_PROMPT = "You are an expert botanist and taxonomist. Generate a detailed, structured identification guide based on the user's request. Use Markdown formatting. Include diagnostic features, common species, ecological context, and if requested, a dichotomous key. Be precise with botanical terminology. IMPORTANT: When generating a dichotomous key, DO NOT use standard Markdown numbered lists (like '1. ', '2. ') because Markdown will auto-renumber them and break the lead correspondence. Instead, use bold text for the leads (e.g., '**1a.** Leaves simple... 2') without list formatting. CRITICAL: You MUST separate EVERY lead with a blank line (two newlines) so they render as separate paragraphs. DO NOT put 1a and 1b on the same line.";
 

@@ -1,3 +1,4 @@
+import { MapPin } from 'lucide-react';
 import React from 'react';
 import { ComparisonProfile, NavigationTarget } from '../../types';
 import { CrossLink } from '../shared/CrossLink';
@@ -17,11 +18,19 @@ export function ComparisonResult({ profile, sources, onNavigate }: ComparisonRes
 
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      {profile.localityContext && (
+        <div className="text-center -mb-2">
+          <p className="inline-block px-4 py-2 bg-slate-900/50 rounded-full text-slate-300 border border-slate-800/50 font-medium">
+            <MapPin className="w-4 h-4 inline-block mr-2 -mt-0.5 text-cyan-500" />
+            Geographic Context: <span className="text-white">{profile.localityContext}</span>
+          </p>
+        </div>
+      )}
+      <div className={`grid grid-cols-1 md:grid-cols-2 ${taxa.length === 2 ? 'lg:grid-cols-2' : 'lg:grid-cols-3'} gap-6`}>
         {taxa.map((taxon, idx) => (
           <div key={idx}>
             <InfoCard className="text-center bg-slate-900/60 border-cyan-900/30">
-              <h3 className="font-display text-2xl font-bold text-white mb-2">
+              <h3 className="font-display text-2xl font-bold text-white mb-2 break-words">
                 <i className="font-serif">{taxon.scientificName}</i>
               </h3>
               <div className="flex flex-col items-center gap-2 text-sm text-slate-400 mb-4">
@@ -32,10 +41,32 @@ export function ComparisonResult({ profile, sources, onNavigate }: ComparisonRes
                 <CrossLink target={{ module: 'profiles', query: taxon.family }} onNavigate={onNavigate}>
                   {taxon.family}
                 </CrossLink>
+                {taxon.synonyms && taxon.synonyms.length > 0 && (
+                  <span className="text-xs italic text-slate-500 text-center">
+                    Synonyms: {taxon.synonyms.join(', ')}
+                  </span>
+                )}
+                {taxon.includedTaxaCount && (
+                  <span className="text-xs italic text-slate-400">
+                    Includes: <span className="not-italic font-medium text-slate-300">{taxon.includedTaxaCount.replace(/\*/g, '')}</span>
+                    {taxon.localIncludedTaxaCount && taxon.localIncludedTaxaCount !== 'N/A' && profile.localityContext && (
+                      <>
+                        <span className="mx-2 text-slate-600">•</span>
+                        <span className="text-cyan-400 font-medium not-italic">Local: {taxon.localIncludedTaxaCount.replace(/\*/g, '')}</span>
+                      </>
+                    )}
+                  </span>
+                )}
+                {taxon.conservationStatus && taxon.conservationStatus !== 'Not Evaluated' && taxon.conservationStatus !== 'N/A' && (
+                  <span className="px-2 py-0.5 rounded bg-slate-800/80 text-xs font-semibold text-slate-300 border border-slate-700/50 mt-1">
+                    {taxon.conservationStatus}
+                  </span>
+                )}
               </div>
-              <p className="text-sm text-slate-300 text-left leading-relaxed">
-                {taxon.quickRecap}
-              </p>
+              <MarkdownRenderer 
+                content={taxon.quickRecap} 
+                className="prose-p:text-sm prose-p:text-slate-300 prose-p:text-left prose-p:leading-relaxed prose-p:m-0" 
+              />
             </InfoCard>
           </div>
         ))}
@@ -67,10 +98,16 @@ export function ComparisonResult({ profile, sources, onNavigate }: ComparisonRes
                   className="border-b border-slate-800/50 hover:bg-slate-800/30 transition-colors"
                 >
                   <td className="py-3 px-4 font-medium text-slate-300">{diff.feature}</td>
-                  <td className="py-3 px-4 text-slate-400">{diff.taxon1State}</td>
-                  <td className="py-3 px-4 text-slate-400">{diff.taxon2State}</td>
+                  <td className="py-3 px-4 text-slate-400">
+                    <MarkdownRenderer content={diff.taxon1State} className="prose-p:m-0 prose-p:leading-normal" />
+                  </td>
+                  <td className="py-3 px-4 text-slate-400">
+                    <MarkdownRenderer content={diff.taxon2State} className="prose-p:m-0 prose-p:leading-normal" />
+                  </td>
                   {profile.taxon3 && (
-                    <td className="py-3 px-4 text-slate-400">{diff.taxon3State}</td>
+                    <td className="py-3 px-4 text-slate-400">
+                      <MarkdownRenderer content={diff.taxon3State!} className="prose-p:m-0 prose-p:leading-normal" />
+                    </td>
                   )}
                 </tr>
               ))}
@@ -79,15 +116,26 @@ export function ComparisonResult({ profile, sources, onNavigate }: ComparisonRes
         </div>
       </InfoCard>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      <div className={`grid grid-cols-1 md:grid-cols-2 ${taxa.length === 2 ? 'lg:grid-cols-2' : 'lg:grid-cols-3'} gap-6`}>
         {taxa.map((taxon, idx) => (
           <div key={idx} className="space-y-6">
             <InfoCard title={`Diagnostic Features (${taxon.scientificName})`}>
               <MarkdownRenderer content={taxon.diagnosticDescription} className="text-sm" />
             </InfoCard>
+            {taxon.fieldNotes && taxon.fieldNotes !== 'N/A' && (
+              <InfoCard title="Field Notes">
+                <MarkdownRenderer content={taxon.fieldNotes} className="text-sm" />
+              </InfoCard>
+            )}
             <InfoCard title="Ecology & Range">
               <MarkdownRenderer content={taxon.ecology} className="text-sm mb-4" />
               <MarkdownRenderer content={taxon.distribution} className="text-sm" />
+              {taxon.seasonality && taxon.seasonality !== 'N/A' && (
+                <div className="mt-4 border-t border-slate-800/50 pt-4">
+                  <h4 className="text-xs font-semibold text-slate-400 mb-1">Seasonality</h4>
+                  <MarkdownRenderer content={taxon.seasonality} className="text-sm" />
+                </div>
+              )}
             </InfoCard>
           </div>
         ))}
