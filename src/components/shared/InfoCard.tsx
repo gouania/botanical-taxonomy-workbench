@@ -24,17 +24,17 @@ export function InfoCard({
 
   return (
     <div
-      className={`bg-slate-900/40 backdrop-blur-xl border border-slate-800/50 rounded-2xl p-6 transition-all ${
+      className={`bg-slate-900/40 backdrop-blur-xl border border-slate-800/50 rounded-2xl p-6 transition-all print:bg-transparent print:text-black print:border-none print:shadow-none print:p-0 print:m-0 ${
         highlight ? 'border-l-4 border-l-cyan-500' : ''
       } ${className}`}
     >
       {(title || icon || onCopy || collapsible) && (
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center justify-between mb-4 print:mb-2 border-b border-transparent print:border-slate-200 print:pb-1">
           <div className="flex items-center gap-2">
-            {icon && <span className="text-cyan-500">{icon}</span>}
-            {title && <h3 className="font-display text-lg font-semibold text-white">{title}</h3>}
+            {icon && <span className="text-cyan-500 print:text-black">{icon}</span>}
+            {title && <h3 className="font-display text-lg font-semibold text-white print:text-black print:font-bold">{title}</h3>}
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 print:hidden">
             {onCopy && (
               <button
                 onClick={onCopy}

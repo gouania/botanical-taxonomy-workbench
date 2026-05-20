@@ -6,11 +6,41 @@ import { InfoCard } from '../shared/InfoCard';
 import { MarkdownRenderer } from '../shared/MarkdownRenderer';
 import { SourcesBar } from '../shared/SourcesBar';
 import { SimilarSpeciesCard } from './SimilarSpeciesCard';
+import { ShareButton, CopyTextButton, PrintPDFButton } from '../shared/ExportTools';
 
 interface SingleResultProps {
   profile: TaxonProfile;
   sources: any[];
   onNavigate: (target: NavigationTarget) => void;
+}
+
+function formatProfileAsMarkdown(profile: TaxonProfile): string {
+  return `
+# ${profile.scientificName} ${profile.author}
+## Common Name: ${profile.commonName}
+**Family:** ${profile.family}
+${profile.localityContext ? `**Geographic Context:** ${profile.localityContext}\n` : ''}
+***
+**Quick Recap:** ${profile.quickRecap}
+
+### Diagnostic Description
+${profile.diagnosticDescription}
+
+${profile.hazards && !profile.hazards.toLowerCase().includes('none') && profile.hazards !== 'N/A' ? `### Hazards & Toxicity\n${profile.hazards}\n` : ''}
+
+### Ecology & Range
+- **Habitat:** ${profile.ecology}
+- **Distribution:** ${profile.distribution}
+${profile.seasonality && profile.seasonality !== 'N/A' ? `- **Seasonality:** ${profile.seasonality}\n` : ''}
+
+### Etymology
+${profile.etymology}
+
+### History
+${profile.history}
+
+${profile.humanRelevance && profile.humanRelevance !== 'N/A' ? `### Human Relevance\n${profile.humanRelevance}\n` : ''}
+  `.trim();
 }
 
 export function SingleResult({ profile, sources, onNavigate }: SingleResultProps) {
@@ -68,7 +98,7 @@ export function SingleResult({ profile, sources, onNavigate }: SingleResultProps
         </div>
         
         {profile.classification && profile.classification.length > 0 ? (
-          <div className="flex flex-wrap items-center justify-center gap-2 text-xs font-medium text-slate-400">
+          <div className="flex flex-wrap items-center justify-center gap-2 text-xs font-medium text-slate-400 mb-6">
             {profile.classification.map((taxon, idx) => (
               <React.Fragment key={idx}>
                 <button 
@@ -84,22 +114,32 @@ export function SingleResult({ profile, sources, onNavigate }: SingleResultProps
             ))}
           </div>
         ) : (
-          <div className="flex flex-wrap items-center justify-center gap-3 text-slate-400">
+          <div className="flex flex-wrap items-center justify-center gap-3 text-slate-400 mb-6">
             <CrossLink target={{ module: 'profiles', query: profile.family }} onNavigate={onNavigate}>
               {profile.family}
             </CrossLink>
           </div>
         )}
+
+        <div className="flex flex-wrap items-center justify-center gap-3 mt-4 print:hidden">
+          <ShareButton />
+          <CopyTextButton 
+            text={formatProfileAsMarkdown(profile)} 
+            label="Copy Markdown" 
+            title="Copy the entire profile as structured Markdown" 
+          />
+          <PrintPDFButton label="Export / Print PDF" />
+        </div>
       </div>
 
-      <InfoCard highlight className="bg-slate-900/60 border-cyan-900/30">
+      <InfoCard highlight className="bg-slate-900/60 border-cyan-900/30 print:bg-white print:text-black print:border-none print:shadow-none">
         <MarkdownRenderer 
           content={profile.quickRecap} 
-          className="prose-p:text-lg prose-p:text-slate-200 prose-p:leading-relaxed prose-p:font-medium prose-p:m-0" 
+          className="prose-p:text-lg prose-p:text-slate-200 prose-p:leading-relaxed prose-p:font-medium prose-p:m-0 print:prose-p:text-black font-sans" 
         />
       </InfoCard>
 
-      <div className="flex justify-center !mt-4 mb-8">
+      <div className="flex justify-center !mt-4 mb-8 print:hidden">
         <button
           onClick={() => onNavigate({ module: 'guide', query: profile.scientificName, locality: profile.localityContext })}
           className="flex items-center gap-2 px-5 py-2.5 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 rounded-xl border border-indigo-500/20 transition-all font-medium"
@@ -111,7 +151,7 @@ export function SingleResult({ profile, sources, onNavigate }: SingleResultProps
         </button>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 print:block print:space-y-6">
         <div className="lg:col-span-8 space-y-6">
           <InfoCard title="Diagnostic Features" icon={<Tag size={20} />}>
             <MarkdownRenderer content={profile.diagnosticDescription} />

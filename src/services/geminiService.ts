@@ -38,42 +38,89 @@ function extractSources(response: any): GroundingSource[] {
     .filter((s: GroundingSource) => s.uri && s.title);
 }
 
-export const generateTaxonGuide = async (inputText: string): Promise<string> => {
-  const ai = getGenAI();
+function cleanErrorMessage(error: any): string {
+  if (!error) return "An unknown error occurred.";
+  const errorObj = typeof error === 'string' ? error : error.message || JSON.stringify(error);
+  
+  if (
+    errorObj.toLowerCase().includes('quota') || 
+    errorObj.toLowerCase().includes('exhausted') || 
+    errorObj.toLowerCase().includes('429') ||
+    errorObj.toLowerCase().includes('rate limit')
+  ) {
+    return "Gemini API Quota Exhausted: You have temporarily hit the platform rate limits or project quota. Please wait a moment before trying again, or try disabling Search Grounding (which uses extra real-time search quota).";
+  }
   
   try {
-    const response = await ai.models.generateContent({
-      model: GEMINI_MODEL,
-      config: {
-        systemInstruction: SYSTEM_PROMPT,
-        temperature: 0.2,
-        thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
-      },
-      contents: [
-        {
-          role: 'user',
-          parts: [{ text: inputText }],
-        },
-      ],
-    });
-
-    const text = response.text;
-    if (!text) {
-        throw new Error("No response text received from Gemini.");
+    const match = errorObj.match(/\{.*\}/);
+    if (match) {
+      const parsed = JSON.parse(match[0]);
+      if (parsed.error?.message) return parsed.error.message;
     }
-    return text;
+  } catch {}
+  
+  return errorObj;
+}
 
-  } catch (error) {
-    console.error("Gemini API Error:", error);
+async function retryWithBackoff<T>(fn: () => Promise<T>, retries = 3, delay = 1500): Promise<T> {
+  try {
+    return await fn();
+  } catch (error: any) {
+    const errorStr = String(error?.message || error || '').toLowerCase();
+    const isRateLimit = 
+      error?.status === 429 || 
+      error?.statusCode === 429 ||
+      errorStr.includes('429') ||
+      errorStr.includes('exhausted') ||
+      errorStr.includes('quota') ||
+      errorStr.includes('limit');
+      
+    if (isRateLimit && retries > 0) {
+      console.warn(`Gemini API rate limited (quota exceeded). Retrying in ${delay}ms... (${retries} retries left)`);
+      await new Promise((resolve) => setTimeout(resolve, delay));
+      return retryWithBackoff(fn, retries - 1, delay * 2);
+    }
     throw error;
   }
+}
+
+export const generateTaxonGuide = async (inputText: string): Promise<string> => {
+  return retryWithBackoff(async () => {
+    const ai = getGenAI();
+    try {
+      const response = await ai.models.generateContent({
+        model: GEMINI_MODEL,
+        config: {
+          systemInstruction: SYSTEM_PROMPT,
+          temperature: 0.2,
+          thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
+        },
+        contents: [
+          {
+            role: 'user',
+            parts: [{ text: inputText }],
+          },
+        ],
+      });
+
+      const text = response.text;
+      if (!text) {
+          throw new Error("No response text received from Gemini.");
+      }
+      return text;
+
+    } catch (error) {
+      console.error("Gemini API Error in generateTaxonGuide:", error);
+      throw new Error(cleanErrorMessage(error));
+    }
+  });
 };
 
 export const generateStructuredTaxonGuide = async (taxon: string, locality: string, useSearch: boolean): Promise<{ result: GeneratedGuideStructured; sources: any[] }> => {
-  const ai = getGenAI();
-  
-  try {
-    const prompt = `You are an expert plant taxonomist and botanical author. Your task is to generate a highly accurate, region-specific identification guide and dichotomous key based on a provided Taxon and Locality.
+  return retryWithBackoff(async () => {
+    const ai = getGenAI();
+    try {
+      const prompt = `You are an expert plant taxonomist and botanical author. Your task is to generate a highly accurate, region-specific identification guide and dichotomous key based on a provided Taxon and Locality.
 
 CRITICAL INSTRUCTION - USE SEARCH GROUNDING:
 Before generating the guide, you MUST use your search capabilities to query authoritative botanical databases, regional floras, and checklists (e.g., GBIF, SEINet, Flora of North America, local university herbaria) to determine EXACTLY which species of the requested ${taxon} are documented to occur natively or are naturalized in the requested ${locality}. Do not include species that do not occur in this specific region.
@@ -85,84 +132,85 @@ Once you have established the verified regional species list, generate the guide
 
 You MUST output your response strictly as a JSON object matching the provided schema.`;
 
-    const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
-      contents: [
-        {
-          role: 'user',
-          parts: [{ text: prompt }],
-        },
-      ],
-      config: {
-        temperature: 0.1,
-        tools: useSearch ? [{ googleSearch: {} }] : undefined,
-        responseMimeType: 'application/json',
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            guide_metadata: {
-              type: Type.OBJECT,
-              properties: {
-                target_taxon: { type: Type.STRING },
-                target_locality: { type: Type.STRING },
-                verification_summary: { type: Type.STRING, description: "Briefly mention the types of sources or databases implicitly used to verify regional presence" }
-              },
-              required: ["target_taxon", "target_locality", "verification_summary"]
-            },
-            taxon_overview: { type: Type.STRING, description: "1-2 paragraphs describing the genus/family characteristics specifically within the context of this locality" },
-            species_profiles: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                properties: {
-                  scientific_name: { type: Type.STRING },
-                  common_name: { type: Type.STRING, nullable: true },
-                  habitat_and_ecology: { type: Type.STRING },
-                  key_diagnostics: { type: Type.STRING }
-                },
-                required: ["scientific_name", "habitat_and_ecology", "key_diagnostics"]
-              }
-            },
-            dichotomous_key: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                properties: {
-                  couplet_id: { type: Type.STRING },
-                  lead_a: {
-                    type: Type.OBJECT,
-                    properties: {
-                      statement: { type: Type.STRING },
-                      destination: { type: Type.STRING }
-                    },
-                    required: ["statement", "destination"]
-                  },
-                  lead_b: {
-                    type: Type.OBJECT,
-                    properties: {
-                      statement: { type: Type.STRING },
-                      destination: { type: Type.STRING }
-                    },
-                    required: ["statement", "destination"]
-                  }
-                },
-                required: ["couplet_id", "lead_a", "lead_b"]
-              }
-            }
+      const response = await ai.models.generateContent({
+        model: "gemini-3-flash-preview",
+        contents: [
+          {
+            role: 'user',
+            parts: [{ text: prompt }],
           },
-          required: ["guide_metadata", "taxon_overview", "species_profiles", "dichotomous_key"]
+        ],
+        config: {
+          temperature: 0.1,
+          tools: useSearch ? [{ googleSearch: {} }] : undefined,
+          responseMimeType: 'application/json',
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              guide_metadata: {
+                type: Type.OBJECT,
+                properties: {
+                  target_taxon: { type: Type.STRING },
+                  target_locality: { type: Type.STRING },
+                  verification_summary: { type: Type.STRING, description: "Briefly mention the types of sources or databases implicitly used to verify regional presence" }
+                },
+                required: ["target_taxon", "target_locality", "verification_summary"]
+              },
+              taxon_overview: { type: Type.STRING, description: "1-2 paragraphs describing the genus/family characteristics specifically within the context of this locality" },
+              species_profiles: {
+                type: Type.ARRAY,
+                items: {
+                  type: Type.OBJECT,
+                  properties: {
+                    scientific_name: { type: Type.STRING },
+                    common_name: { type: Type.STRING, nullable: true },
+                    habitat_and_ecology: { type: Type.STRING },
+                    key_diagnostics: { type: Type.STRING }
+                  },
+                  required: ["scientific_name", "habitat_and_ecology", "key_diagnostics"]
+                }
+              },
+              dichotomous_key: {
+                type: Type.ARRAY,
+                items: {
+                  type: Type.OBJECT,
+                  properties: {
+                    couplet_id: { type: Type.STRING },
+                    lead_a: {
+                      type: Type.OBJECT,
+                      properties: {
+                        statement: { type: Type.STRING },
+                        destination: { type: Type.STRING }
+                      },
+                      required: ["statement", "destination"]
+                    },
+                    lead_b: {
+                      type: Type.OBJECT,
+                      properties: {
+                        statement: { type: Type.STRING },
+                        destination: { type: Type.STRING }
+                      },
+                      required: ["statement", "destination"]
+                    }
+                  },
+                  required: ["couplet_id", "lead_a", "lead_b"]
+                }
+              }
+            },
+            required: ["guide_metadata", "taxon_overview", "species_profiles", "dichotomous_key"]
+          }
         }
-      }
-    });
+      });
 
-    const result = JSON.parse(response.text || '{}') as GeneratedGuideStructured;
-    const sources = extractSources(response);
-    return { result, sources };
+      const result = JSON.parse(response.text || '{}') as GeneratedGuideStructured;
+      const sources = extractSources(response);
+      return { result, sources };
 
-  } catch (error) {
-    console.error("Gemini API Error:", error);
-    throw error;
-  }
+    } catch (error) {
+      console.error("Gemini API Error in generateStructuredTaxonGuide:", error);
+      throw new Error(cleanErrorMessage(error));
+    }
+  });
 };
 
 const confusedTaxonSchema = {
@@ -215,8 +263,9 @@ const taxonSchemaProperties = {
 
 export const geminiService = {
   async analyzeSingleTaxon(name: string, locality?: string): Promise<{ result: TaxonProfile; sources: any[] }> {
-    const ai = getGenAI();
-    const prompt = `Taxonomist mode. Analyze: "${name}"${locality ? ` within the locality/geographic context of "${locality}"` : ""}. 
+    return retryWithBackoff(async () => {
+      const ai = getGenAI();
+      const prompt = `Taxonomist mode. Analyze: "${name}"${locality ? ` within the locality/geographic context of "${locality}"` : ""}. 
 Search for precise diagnostic morphology and verified classification.
 
 STRICT STRUCTURAL RULES:
@@ -231,52 +280,59 @@ STRICT STRUCTURAL RULES:
 6. Provide concise context for new keys (hazards, conservationStatus, etc.).
 7. 'includedTaxaCount' and 'localIncludedTaxaCount': Specify the global number of accepted included taxa, and if a locality is provided, the number within that locality.`;
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-3-flash-preview',
-      contents: prompt,
-      config: {
-        temperature: 0.1,
-        thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
-        tools: [{ googleSearch: {} }],
-        responseMimeType: 'application/json',
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: taxonSchemaProperties,
-          required: [
-            'scientificName',
-            'author',
-            'commonName',
-            'family',
-            'classification',
-            'includedTaxaCount',
-            'localIncludedTaxaCount',
-            'synonyms',
-            'conservationStatus',
-            'hazards',
-            'fieldNotes',
-            'seasonality',
-            'humanRelevance',
-            'quickRecap',
-            'diagnosticDescription',
-            'confusedTaxa',
-            'ecology',
-            'etymology',
-            'history',
-            'distribution',
-          ],
-        },
-      },
-    });
+      try {
+        const response = await ai.models.generateContent({
+          model: 'gemini-3-flash-preview',
+          contents: prompt,
+          config: {
+            temperature: 0.1,
+            thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
+            tools: [{ googleSearch: {} }],
+            responseMimeType: 'application/json',
+            responseSchema: {
+              type: Type.OBJECT,
+              properties: taxonSchemaProperties,
+              required: [
+                'scientificName',
+                'author',
+                'commonName',
+                'family',
+                'classification',
+                'includedTaxaCount',
+                'localIncludedTaxaCount',
+                'synonyms',
+                'conservationStatus',
+                'hazards',
+                'fieldNotes',
+                'seasonality',
+                'humanRelevance',
+                'quickRecap',
+                'diagnosticDescription',
+                'confusedTaxa',
+                'ecology',
+                'etymology',
+                'history',
+                'distribution',
+              ],
+            },
+          },
+        });
 
-    const result = JSON.parse(response.text || '{}') as TaxonProfile;
-    if (locality) result.localityContext = locality;
-    const sources = extractSources(response);
-    return { result, sources };
+        const result = JSON.parse(response.text || '{}') as TaxonProfile;
+        if (locality) result.localityContext = locality;
+        const sources = extractSources(response);
+        return { result, sources };
+      } catch (error) {
+        console.error("Gemini API Error in analyzeSingleTaxon:", error);
+        throw new Error(cleanErrorMessage(error));
+      }
+    });
   },
 
   async compareTaxa(names: string[], locality?: string): Promise<{ result: ComparisonProfile; sources: any[] }> {
-    const ai = getGenAI();
-    const prompt = `Taxonomist mode. Compare: ${names.map((n) => `"${n}"`).join(', ')}${locality ? ` within the locality/geographic context of "${locality}"` : ""}.
+    return retryWithBackoff(async () => {
+      const ai = getGenAI();
+      const prompt = `Taxonomist mode. Compare: ${names.map((n) => `"${n}"`).join(', ')}${locality ? ` within the locality/geographic context of "${locality}"` : ""}.
 Search for precise differences in recent literature.
 
 STRICT STRUCTURAL RULES:
@@ -291,119 +347,125 @@ STRICT STRUCTURAL RULES:
 6. Provide concise context for new keys (hazards, conservationStatus, etc.).
 7. 'includedTaxaCount' and 'localIncludedTaxaCount': Specify the global number of accepted included taxa for that taxon, and 'localIncludedTaxaCount' for the number within the locality if provided.`;
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-3-flash-preview',
-      contents: prompt,
-      config: {
-        temperature: 0.1,
-        thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
-        tools: [{ googleSearch: {} }],
-        responseMimeType: 'application/json',
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            taxon1: {
+      try {
+        const response = await ai.models.generateContent({
+          model: 'gemini-3-flash-preview',
+          contents: prompt,
+          config: {
+            temperature: 0.1,
+            thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
+            tools: [{ googleSearch: {} }],
+            responseMimeType: 'application/json',
+            responseSchema: {
               type: Type.OBJECT,
-              properties: taxonSchemaProperties,
-              required: [
-                'scientificName',
-                'author',
-                'commonName',
-                'family',
-                'classification',
-                'includedTaxaCount',
-                'localIncludedTaxaCount',
-                'synonyms',
-                'conservationStatus',
-                'hazards',
-                'fieldNotes',
-                'seasonality',
-                'humanRelevance',
-                'quickRecap',
-                'diagnosticDescription',
-                'confusedTaxa',
-                'ecology',
-                'etymology',
-                'history',
-                'distribution',
-              ],
-            },
-            taxon2: {
-              type: Type.OBJECT,
-              properties: taxonSchemaProperties,
-              required: [
-                'scientificName',
-                'author',
-                'commonName',
-                'family',
-                'classification',
-                'includedTaxaCount',
-                'localIncludedTaxaCount',
-                'synonyms',
-                'conservationStatus',
-                'hazards',
-                'fieldNotes',
-                'seasonality',
-                'humanRelevance',
-                'quickRecap',
-                'diagnosticDescription',
-                'confusedTaxa',
-                'ecology',
-                'etymology',
-                'history',
-                'distribution',
-              ],
-            },
-            taxon3: {
-              type: Type.OBJECT,
-              properties: taxonSchemaProperties,
-              required: [
-                'scientificName',
-                'author',
-                'commonName',
-                'family',
-                'classification',
-                'includedTaxaCount',
-                'localIncludedTaxaCount',
-                'synonyms',
-                'conservationStatus',
-                'hazards',
-                'fieldNotes',
-                'seasonality',
-                'humanRelevance',
-                'quickRecap',
-                'diagnosticDescription',
-                'confusedTaxa',
-                'ecology',
-                'etymology',
-                'history',
-                'distribution',
-              ],
-            },
-            keyDifferences: {
-              type: Type.ARRAY,
-              description: "Key diagnostic differences between the taxa",
-              items: {
-                type: Type.OBJECT,
-                properties: {
-                  feature: { type: Type.STRING, description: "The morphological character being compared" },
-                  taxon1State: { type: Type.STRING, description: "State in taxon 1 (Markdown supported, bold sparingly)" },
-                  taxon2State: { type: Type.STRING, description: "State in taxon 2 (Markdown supported, bold sparingly)" },
-                  taxon3State: { type: Type.STRING, description: "State in taxon 3 (Markdown supported, bold sparingly)" },
+              properties: {
+                taxon1: {
+                  type: Type.OBJECT,
+                  properties: taxonSchemaProperties,
+                  required: [
+                    'scientificName',
+                    'author',
+                    'commonName',
+                    'family',
+                    'classification',
+                    'includedTaxaCount',
+                    'localIncludedTaxaCount',
+                    'synonyms',
+                    'conservationStatus',
+                    'hazards',
+                    'fieldNotes',
+                    'seasonality',
+                    'humanRelevance',
+                    'quickRecap',
+                    'diagnosticDescription',
+                    'confusedTaxa',
+                    'ecology',
+                    'etymology',
+                    'history',
+                    'distribution',
+                  ],
                 },
-                required: ['feature', 'taxon1State', 'taxon2State'],
+                taxon2: {
+                  type: Type.OBJECT,
+                  properties: taxonSchemaProperties,
+                  required: [
+                    'scientificName',
+                    'author',
+                    'commonName',
+                    'family',
+                    'classification',
+                    'includedTaxaCount',
+                    'localIncludedTaxaCount',
+                    'synonyms',
+                    'conservationStatus',
+                    'hazards',
+                    'fieldNotes',
+                    'seasonality',
+                    'humanRelevance',
+                    'quickRecap',
+                    'diagnosticDescription',
+                    'confusedTaxa',
+                    'ecology',
+                    'etymology',
+                    'history',
+                    'distribution',
+                  ],
+                },
+                taxon3: {
+                  type: Type.OBJECT,
+                  properties: taxonSchemaProperties,
+                  required: [
+                    'scientificName',
+                    'author',
+                    'commonName',
+                    'family',
+                    'classification',
+                    'includedTaxaCount',
+                    'localIncludedTaxaCount',
+                    'synonyms',
+                    'conservationStatus',
+                    'hazards',
+                    'fieldNotes',
+                    'seasonality',
+                    'humanRelevance',
+                    'quickRecap',
+                    'diagnosticDescription',
+                    'confusedTaxa',
+                    'ecology',
+                    'etymology',
+                    'history',
+                    'distribution',
+                  ],
+                },
+                keyDifferences: {
+                  type: Type.ARRAY,
+                  description: "Key diagnostic differences between the taxa",
+                  items: {
+                    type: Type.OBJECT,
+                    properties: {
+                      feature: { type: Type.STRING, description: "The morphological character being compared" },
+                      taxon1State: { type: Type.STRING, description: "State in taxon 1 (Markdown supported, bold sparingly)" },
+                      taxon2State: { type: Type.STRING, description: "State in taxon 2 (Markdown supported, bold sparingly)" },
+                      taxon3State: { type: Type.STRING, description: "State in taxon 3 (Markdown supported, bold sparingly)" },
+                    },
+                    required: ['feature', 'taxon1State', 'taxon2State'],
+                  },
+                },
               },
+              required: ['taxon1', 'taxon2', 'keyDifferences'],
             },
           },
-          required: ['taxon1', 'taxon2', 'keyDifferences'],
-        },
-      },
-    });
+        });
 
-    const result = JSON.parse(response.text || '{}') as ComparisonProfile;
-    if (locality) result.localityContext = locality;
-    const sources = extractSources(response);
-    return { result, sources };
+        const result = JSON.parse(response.text || '{}') as ComparisonProfile;
+        if (locality) result.localityContext = locality;
+        const sources = extractSources(response);
+        return { result, sources };
+      } catch (error) {
+        console.error("Gemini API Error in compareTaxa:", error);
+        throw new Error(cleanErrorMessage(error));
+      }
+    });
   },
 
   async identifySpecimen(
@@ -412,9 +474,8 @@ STRICT STRUCTURAL RULES:
     location: string,
     suspectedFamilies: string
   ): Promise<{ result: IdentifyResult; sources: any[] }> {
-    const ai = getGenAI();
-    let retries = 2;
-    while (retries >= 0) {
+    return retryWithBackoff(async () => {
+      const ai = getGenAI();
       try {
         const response = await ai.models.generateContent({
           model: 'gemini-3-flash-preview',
@@ -483,162 +544,181 @@ Suspected Families: ${suspectedFamilies}`,
         const result = JSON.parse(response.text || '{}') as IdentifyResult;
         const sources = extractSources(response);
         return { result, sources };
-      } catch (e) {
-        if (retries === 0) throw e;
-        retries--;
-        await new Promise((resolve) => setTimeout(resolve, 1000));
+      } catch (error) {
+        console.error("Gemini API Error in identifySpecimen:", error);
+        throw new Error(cleanErrorMessage(error));
       }
-    }
-    throw new Error('Failed to identify specimen after retries');
+    });
   },
 
   async suggestNextCharacters(
     selectedCharacters: string[],
     availableCharacters: string[]
   ): Promise<{ id: string; reasoning: string }[]> {
-    const ai = getGenAI();
-    const response = await ai.models.generateContent({
-      model: 'gemini-3-flash-preview',
-      contents: `Given these selected characters: ${selectedCharacters.join(', ')}.
+    return retryWithBackoff(async () => {
+      const ai = getGenAI();
+      try {
+        const response = await ai.models.generateContent({
+          model: 'gemini-3-flash-preview',
+          contents: `Given these selected characters: ${selectedCharacters.join(', ')}.
 Suggest the top 3 most discriminating characters to try next from this list: ${availableCharacters.join(', ')}.`,
-      config: {
-        temperature: 0.1,
-        responseMimeType: 'application/json',
-        responseSchema: {
-          type: Type.ARRAY,
-          items: {
-            type: Type.OBJECT,
-            properties: {
-              id: { type: Type.STRING },
-              reasoning: { type: Type.STRING },
+          config: {
+            temperature: 0.1,
+            responseMimeType: 'application/json',
+            responseSchema: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  id: { type: Type.STRING },
+                  reasoning: { type: Type.STRING },
+                },
+              },
             },
           },
-        },
-      },
-    });
+        });
 
-    return JSON.parse(response.text || '[]');
+        return JSON.parse(response.text || '[]');
+      } catch (error) {
+        console.error("Gemini API Error in suggestNextCharacters:", error);
+        throw new Error(cleanErrorMessage(error));
+      }
+    });
   },
 
   async explainCharacter(characterLabel: string): Promise<string> {
-    const ai = getGenAI();
-    const response = await ai.models.generateContent({
-      model: 'gemini-3-flash-preview',
-      contents: `Provide a concise botanical definition for the morphological character: "${characterLabel}".`,
-      config: { temperature: 0.1 },
+    return retryWithBackoff(async () => {
+      const ai = getGenAI();
+      try {
+        const response = await ai.models.generateContent({
+          model: 'gemini-3-flash-preview',
+          contents: `Provide a concise botanical definition for the morphological character: "${characterLabel}".`,
+          config: { temperature: 0.1 },
+        });
+        return response.text || '';
+      } catch (error) {
+        console.error("Gemini API Error in explainCharacter:", error);
+        throw new Error(cleanErrorMessage(error));
+      }
     });
-    return response.text || '';
-  },
-
-  async lookupAuthority(query: string): Promise<{ result: AuthorProfile; sources: any[] }> {
-    const ai = getGenAI();
-    const response = await ai.models.generateContent({
-      model: 'gemini-3-flash-preview',
-      contents: `Look up botanical taxonomic author: "${query}". Provide a rich biographical and bibliographic profile. 
-      
+  },  async lookupAuthority(query: string): Promise<{ result: AuthorProfile; sources: any[] }> {
+    return retryWithBackoff(async () => {
+      const ai = getGenAI();
+      try {
+        const response = await ai.models.generateContent({
+          model: 'gemini-3-flash-preview',
+          contents: `Look up botanical taxonomic author: "${query}". Provide a rich biographical and bibliographic profile. 
+          
 CRITICAL INSTRUCTION TO PREVENT HALLUCINATIONS:
 For the 'taxaDescribed' field, you MUST rigorously verify that the author is the original describing authority for the taxa you list. Do not guess or hallucinate taxa. Use the googleSearch tool to query reliable botanical databases (like IPNI, POWO, Tropicos, or Wikipedia) to confirm the author abbreviation matches the taxon's authority. If you cannot confidently verify a taxon was described by this author, DO NOT include it.`,
-      config: {
-        temperature: 0.1,
-        thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
-        tools: [{ googleSearch: {} }],
-        responseMimeType: 'application/json',
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            fullName: { type: Type.STRING },
-            standardAbbreviation: { type: Type.STRING },
-            lifespan: { type: Type.STRING },
-            nationality: { type: Type.STRING },
-            birthPlace: { type: Type.STRING },
-            deathPlace: { type: Type.STRING },
-            mainContribution: { type: Type.STRING },
-            biography: { type: Type.STRING },
-            historicalContext: { type: Type.STRING },
-            almaMater: { type: Type.ARRAY, items: { type: Type.STRING } },
-            institutions: { type: Type.ARRAY, items: { type: Type.STRING } },
-            focusAreas: { type: Type.ARRAY, items: { type: Type.STRING } },
-            awards: { type: Type.ARRAY, items: { type: Type.STRING } },
-            fieldWorkRegions: { type: Type.ARRAY, items: { type: Type.STRING } },
-            majorWorks: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                properties: {
-                  year: { type: Type.STRING },
-                  title: { type: Type.STRING },
+          config: {
+            temperature: 0.1,
+            thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
+            tools: [{ googleSearch: {} }],
+            responseMimeType: 'application/json',
+            responseSchema: {
+              type: Type.OBJECT,
+              properties: {
+                fullName: { type: Type.STRING },
+                standardAbbreviation: { type: Type.STRING },
+                lifespan: { type: Type.STRING },
+                nationality: { type: Type.STRING },
+                birthPlace: { type: Type.STRING },
+                deathPlace: { type: Type.STRING },
+                mainContribution: { type: Type.STRING },
+                biography: { type: Type.STRING },
+                historicalContext: { type: Type.STRING },
+                almaMater: { type: Type.ARRAY, items: { type: Type.STRING } },
+                institutions: { type: Type.ARRAY, items: { type: Type.STRING } },
+                focusAreas: { type: Type.ARRAY, items: { type: Type.STRING } },
+                awards: { type: Type.ARRAY, items: { type: Type.STRING } },
+                fieldWorkRegions: { type: Type.ARRAY, items: { type: Type.STRING } },
+                majorWorks: {
+                  type: Type.ARRAY,
+                  items: {
+                    type: Type.OBJECT,
+                    properties: {
+                      year: { type: Type.STRING },
+                      title: { type: Type.STRING },
+                    },
+                  },
+                },
+                taxaDescribed: {
+                  type: Type.ARRAY,
+                  items: {
+                    type: Type.OBJECT,
+                    properties: {
+                      name: { type: Type.STRING },
+                      rank: { type: Type.STRING },
+                    },
+                  },
+                },
+                eponymousTaxa: {
+                  type: Type.ARRAY,
+                  items: {
+                    type: Type.OBJECT,
+                    properties: {
+                      name: { type: Type.STRING },
+                      rank: { type: Type.STRING },
+                      reason: { type: Type.STRING },
+                    },
+                  },
+                },
+                herbariaCollections: {
+                  type: Type.ARRAY,
+                  items: {
+                    type: Type.OBJECT,
+                    properties: {
+                      abbreviation: { type: Type.STRING },
+                      institution: { type: Type.STRING },
+                    },
+                  },
+                },
+                taxonomicNotes: { type: Type.STRING },
+                notableMentors: { type: Type.ARRAY, items: { type: Type.STRING } },
+                notableStudents: { type: Type.ARRAY, items: { type: Type.STRING } },
+                relatedBotanists: {
+                  type: Type.ARRAY,
+                  items: {
+                    type: Type.OBJECT,
+                    properties: {
+                      name: { type: Type.STRING },
+                      connection: { type: Type.STRING },
+                    },
+                  },
                 },
               },
-            },
-            taxaDescribed: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                properties: {
-                  name: { type: Type.STRING },
-                  rank: { type: Type.STRING },
-                },
-              },
-            },
-            eponymousTaxa: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                properties: {
-                  name: { type: Type.STRING },
-                  rank: { type: Type.STRING },
-                  reason: { type: Type.STRING },
-                },
-              },
-            },
-            herbariaCollections: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                properties: {
-                  abbreviation: { type: Type.STRING },
-                  institution: { type: Type.STRING },
-                },
-              },
-            },
-            taxonomicNotes: { type: Type.STRING },
-            notableMentors: { type: Type.ARRAY, items: { type: Type.STRING } },
-            notableStudents: { type: Type.ARRAY, items: { type: Type.STRING } },
-            relatedBotanists: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                properties: {
-                  name: { type: Type.STRING },
-                  connection: { type: Type.STRING },
-                },
-              },
+              required: [
+                'fullName',
+                'standardAbbreviation',
+                'lifespan',
+                'nationality',
+                'mainContribution',
+                'biography',
+              ],
             },
           },
-          required: [
-            'fullName',
-            'standardAbbreviation',
-            'lifespan',
-            'nationality',
-            'mainContribution',
-            'biography',
-          ],
-        },
-      },
-    });
+        });
 
-    const result = JSON.parse(response.text || '{}') as AuthorProfile;
-    const sources = extractSources(response);
-    return { result, sources };
+        const result = JSON.parse(response.text || '{}') as AuthorProfile;
+        const sources = extractSources(response);
+        return { result, sources };
+      } catch (error) {
+        console.error("Gemini API Error in lookupAuthority:", error);
+        throw new Error(cleanErrorMessage(error));
+      }
+    });
   },
 
   async generateLocalityProfile(
     locationInput: string
   ): Promise<{ result: LocalityProfile; sources: any[] }> {
-    const ai = getGenAI();
-    const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
-      contents: `
+    return retryWithBackoff(async () => {
+      const ai = getGenAI();
+      try {
+        const response = await ai.models.generateContent({
+          model: "gemini-3-flash-preview",
+          contents: `
 You are an expert field botanist, plant taxonomist, and biogeographer. Your task is to generate a highly accurate, scientifically rigorous "Locality Profile" based on a user-provided location name or GPS coordinates: "${locationInput}"
 
 Your audience consists of professional botanists planning field expeditions or analyzing herbarium specimens. Use precise botanical, geological, and ecological terminology. 
@@ -647,86 +727,91 @@ If coordinates are provided, resolve them to the nearest meaningful geographic f
 
 You MUST output your response strictly to the JSON schema.
 `,
-      config: {
-        temperature: 0.1,
-        tools: [{ googleSearch: {} }],
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            location_details: {
+          config: {
+            temperature: 0.1,
+            tools: [{ googleSearch: {} }],
+            responseMimeType: "application/json",
+            responseSchema: {
               type: Type.OBJECT,
               properties: {
-                resolved_name: { type: Type.STRING, description: "String (e.g., Barranca de Huentitán, Guadalajara, Jalisco, Mexico)" },
-                coordinates_dms: { type: Type.STRING, description: "String (e.g., 20°43'28\"N, 103°17'19\"W)" },
-                latitude: { type: Type.NUMBER, description: "Decimal latitude for maps" },
-                longitude: { type: Type.NUMBER, description: "Decimal longitude for maps" }
-              },
-              required: ["resolved_name", "coordinates_dms"]
-            },
-            habitat_and_landscape: {
-              type: Type.OBJECT,
-              properties: {
-                ecosystem_description: { type: Type.STRING, description: "String (Detailed description of the biome, topography, and hydrology)" },
-                climate: { type: Type.STRING, description: "String (Köppen climate classification and description of seasonality/rainfall)" },
-                soil_type: { type: Type.STRING, description: "String (Geological origin, soil orders e.g., lithosols, limestone karst)" },
-                elevation_range: { type: Type.STRING, description: "String (e.g., 1,000 m to 1,550 m above sea level)" },
-                ecoregion: { type: Type.STRING, description: "String (WWF Terrestrial Ecoregion or EPA Level III Ecosystem)" }
-              },
-              required: ["ecosystem_description", "climate", "soil_type", "elevation_range", "ecoregion"]
-            },
-            geography_and_history: {
-              type: Type.OBJECT,
-              properties: {
-                geographic_context: { type: Type.STRING, description: "String (Broader biogeographic region, e.g., Trans-Mexican Volcanic Belt)" },
-                historical_notes: { type: Type.STRING, description: "String (Famous botanical explorers who collected here, type locality info, or historical land use)" },
-                protected_status: { type: Type.STRING, description: "String (Is it a national park, reserve, or private land? Mention permit implications if known)" }
-              },
-              required: ["geographic_context", "historical_notes", "protected_status"]
-            },
-            phenology: {
-              type: Type.OBJECT,
-              properties: {
-                optimal_collecting_season: { type: Type.STRING, description: "String (When is the best time to observe flowering/fruiting for the dominant flora)" }
-              },
-              required: ["optimal_collecting_season"]
-            },
-            taxa: {
-              type: Type.OBJECT,
-              properties: {
-                dominant_species: {
-                  type: Type.ARRAY,
-                  items: { type: Type.STRING },
-                  description: "Array of Strings (Use binomial nomenclature, e.g., 'Bursera fagaroides', not just 'Bursera')"
+                location_details: {
+                  type: Type.OBJECT,
+                  properties: {
+                    resolved_name: { type: Type.STRING, description: "String (e.g., Barranca de Huentitán, Guadalajara, Jalisco, Mexico)" },
+                    coordinates_dms: { type: Type.STRING, description: "String (e.g., 20°43'28\"N, 103°17'19\"W)" },
+                    latitude: { type: Type.NUMBER, description: "Decimal latitude for maps" },
+                    longitude: { type: Type.NUMBER, description: "Decimal longitude for maps" }
+                  },
+                  required: ["resolved_name", "coordinates_dms"]
                 },
-                endemic_and_notable: {
+                habitat_and_landscape: {
+                  type: Type.OBJECT,
+                  properties: {
+                    ecosystem_description: { type: Type.STRING, description: "String (Detailed description of the biome, topography, and hydrology)" },
+                    climate: { type: Type.STRING, description: "String (Köppen climate classification and description of seasonality/rainfall)" },
+                    soil_type: { type: Type.STRING, description: "String (Geological origin, soil orders e.g., lithosols, limestone karst)" },
+                    elevation_range: { type: Type.STRING, description: "String (e.g., 1,000 m to 1,550 m above sea level)" },
+                    ecoregion: { type: Type.STRING, description: "String (WWF Terrestrial Ecoregion or EPA Level III Ecosystem)" }
+                  },
+                  required: ["ecosystem_description", "climate", "soil_type", "elevation_range", "ecoregion"]
+                },
+                geography_and_history: {
+                  type: Type.OBJECT,
+                  properties: {
+                    geographic_context: { type: Type.STRING, description: "String (Broader biogeographic region, e.g., Trans-Mexican Volcanic Belt)" },
+                    historical_notes: { type: Type.STRING, description: "String (Famous botanical explorers who collected here, type locality info, or historical land use)" },
+                    protected_status: { type: Type.STRING, description: "String (Is it a national park, reserve, or private land? Mention permit implications if known)" }
+                  },
+                  required: ["geographic_context", "historical_notes", "protected_status"]
+                },
+                phenology: {
+                  type: Type.OBJECT,
+                  properties: {
+                    optimal_collecting_season: { type: Type.STRING, description: "String (When is the best time to observe flowering/fruiting for the dominant flora)" }
+                  },
+                  required: ["optimal_collecting_season"]
+                },
+                taxa: {
+                  type: Type.OBJECT,
+                  properties: {
+                    dominant_species: {
+                      type: Type.ARRAY,
+                      items: { type: Type.STRING },
+                      description: "Array of Strings (Use binomial nomenclature, e.g., 'Bursera fagaroides', not just 'Bursera')"
+                    },
+                    endemic_and_notable: {
+                      type: Type.ARRAY,
+                      items: { type: Type.STRING },
+                      description: "Array of Strings (Species endemic to this specific region or of high conservation value)"
+                    }
+                  },
+                  required: ["dominant_species", "endemic_and_notable"]
+                },
+                ecological_threats: {
                   type: Type.ARRAY,
                   items: { type: Type.STRING },
-                  description: "Array of Strings (Species endemic to this specific region or of high conservation value)"
+                  description: "Array of Strings (Specific threats like invasive species names, urban sprawl, agriculture)"
                 }
               },
-              required: ["dominant_species", "endemic_and_notable"]
+              required: [
+                "location_details",
+                "habitat_and_landscape",
+                "geography_and_history",
+                "phenology",
+                "taxa",
+                "ecological_threats"
+              ],
             },
-            ecological_threats: {
-              type: Type.ARRAY,
-              items: { type: Type.STRING },
-              description: "Array of Strings (Specific threats like invasive species names, urban sprawl, agriculture)"
-            }
           },
-          required: [
-            "location_details",
-            "habitat_and_landscape",
-            "geography_and_history",
-            "phenology",
-            "taxa",
-            "ecological_threats"
-          ],
-        },
-      },
-    });
+        });
 
-    const result = JSON.parse(response.text || '{}') as LocalityProfile;
-    const sources = extractSources(response);
-    return { result, sources };
+        const result = JSON.parse(response.text || '{}') as LocalityProfile;
+        const sources = extractSources(response);
+        return { result, sources };
+      } catch (error) {
+        console.error("Gemini API Error in generateLocalityProfile:", error);
+        throw new Error(cleanErrorMessage(error));
+      }
+    });
   },
 };

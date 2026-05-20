@@ -4,11 +4,44 @@ import { InfoCard } from '../shared/InfoCard';
 import { MapPin, Thermometer, Droplets, Mountain, Leaf, ShieldAlert, History, Globe2, Calendar, MapIcon, Info } from 'lucide-react';
 import { CrossLink } from '../shared/CrossLink';
 import { SourcesBar } from '../shared/SourcesBar';
+import { ShareButton, CopyTextButton, PrintPDFButton } from '../shared/ExportTools';
 
 interface LocalityDashboardProps {
   profile: LocalityProfile;
   sources: any[];
   onNavigate: (target: NavigationTarget) => void;
+}
+
+function formatLocalityAsMarkdown(profile: LocalityProfile): string {
+  return `
+# Locality Profile: ${profile.location_details.resolved_name}
+**Coordinates:** ${profile.location_details.coordinates_dms}
+***
+## Habitat & Landscape
+**Ecosystem Description:** ${profile.habitat_and_landscape.ecosystem_description}
+- **Climate:** ${profile.habitat_and_landscape.climate}
+- **Soil Type:** ${profile.habitat_and_landscape.soil_type}
+- **Elevation Range:** ${profile.habitat_and_landscape.elevation_range}
+- **Ecoregion:** ${profile.habitat_and_landscape.ecoregion}
+
+## Geography & History
+- **Geographic Context:** ${profile.geography_and_history.geographic_context}
+- **Historical Notes:** ${profile.geography_and_history.historical_notes}
+- **Protected Status:** ${profile.geography_and_history.protected_status}
+
+## Phenology
+- **Optimal Collecting Season:** ${profile.phenology.optimal_collecting_season}
+
+## Floral Context
+### Dominant Species:
+${profile.taxa.dominant_species.map(s => `- *${s}*`).join('\n')}
+
+### Endemic & Notable Species:
+${profile.taxa.endemic_and_notable.map(s => `- *${s}*`).join('\n')}
+
+## Ecological Threats
+${profile.ecological_threats.map(t => `- ${t}`).join('\n')}
+  `.trim();
 }
 
 export function LocalityDashboard({ profile, sources, onNavigate }: LocalityDashboardProps) {
@@ -18,13 +51,23 @@ export function LocalityDashboard({ profile, sources, onNavigate }: LocalityDash
         <h2 className="font-display text-4xl md:text-5xl font-bold text-white mb-3">
           {profile.location_details.resolved_name}
         </h2>
-        <div className="flex items-center justify-center gap-2 text-cyan-400 font-medium">
+        <div className="flex items-center justify-center gap-2 text-cyan-400 font-medium mb-4">
           <MapPin size={18} />
           {profile.location_details.coordinates_dms}
         </div>
+
+        <div className="flex flex-wrap items-center justify-center gap-3 print:hidden">
+          <ShareButton />
+          <CopyTextButton 
+            text={formatLocalityAsMarkdown(profile)} 
+            label="Copy Locality Data" 
+            title="Copy entire region details as formatted Markdown" 
+          />
+          <PrintPDFButton label="Export / Print PDF" />
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 print:block print:space-y-6">
         <div className="lg:col-span-8 space-y-6">
           <InfoCard title="Habitat & Landscape" highlight className="bg-slate-900/60 border-cyan-900/30">
             <p className="text-slate-200 leading-relaxed mb-6">
@@ -93,7 +136,7 @@ export function LocalityDashboard({ profile, sources, onNavigate }: LocalityDash
 
         <div className="lg:col-span-4 space-y-6">
           {profile.location_details.latitude && profile.location_details.longitude && (
-            <InfoCard title="Map View" className="p-0 overflow-hidden h-64 border-slate-700/50">
+            <InfoCard title="Map View" className="p-0 overflow-hidden h-64 border-slate-700/50 print:hidden">
               <iframe
                 title="Locality Map"
                 width="100%"

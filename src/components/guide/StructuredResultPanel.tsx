@@ -1,15 +1,42 @@
 import React from 'react';
 import Markdown from 'react-markdown';
-import { Loader2, AlertCircle, ListTree, Info, ShieldCheck, MapPin } from 'lucide-react';
+import { Loader2, AlertCircle, ListTree, Info, MapPin } from 'lucide-react';
 import { AppStatus, GeneratedGuideStructured, NavigationTarget } from '../../types';
 import { SourcesBar } from '../shared/SourcesBar';
 import { CrossLink } from '../shared/CrossLink';
+import { ShareButton, CopyTextButton, PrintPDFButton } from '../shared/ExportTools';
 
 interface StructuredResultPanelProps {
   status: AppStatus;
   guide: GeneratedGuideStructured | null;
   sources?: any[];
   onNavigate?: (target: NavigationTarget) => void;
+}
+
+function formatStructuredGuideAsMarkdown(guide: GeneratedGuideStructured): string {
+  return `
+# Identification Guide to ${guide.guide_metadata.target_taxon}
+**Locality:** ${guide.guide_metadata.target_locality}
+***
+## Taxon Overview
+${guide.taxon_overview}
+
+***
+## Dichotomous Key
+${guide.dichotomous_key.map(couplet => `
+${couplet.couplet_id}.
+- a. ${couplet.lead_a.statement} -> **${couplet.lead_a.destination}**
+- b. ${couplet.lead_b.statement} -> **${couplet.lead_b.destination}**
+`).join('\n')}
+
+***
+## Species Profiles
+${guide.species_profiles.map(sp => `
+### *${sp.scientific_name}* (${sp.common_name || 'N/A'})
+- **Key Diagnostics:** ${sp.key_diagnostics}
+- **Habitat & Ecology:** ${sp.habitat_and_ecology}
+`).join('\n')}
+  `.trim();
 }
 
 export function StructuredResultPanel({ status, guide, sources, onNavigate }: StructuredResultPanelProps) {
@@ -57,20 +84,24 @@ export function StructuredResultPanel({ status, guide, sources, onNavigate }: St
     <div className="bg-slate-900/50 border border-slate-800/50 rounded-2xl p-6 md:p-8 shadow-xl backdrop-blur-sm h-full overflow-y-auto print:bg-white print:text-black print:shadow-none print:border-none space-y-8 text-slate-200">
       
       {/* Header */}
-      <div className="text-center pb-6 border-b border-slate-800">
+      <div className="text-center pb-6 border-b border-slate-800 print:border-slate-300">
         <h2 className="text-3xl font-display font-bold text-white mb-2 print:text-black">
-           Identification Guide to <i className="text-cyan-400 font-normal">{guide.guide_metadata.target_taxon}</i>
+           Identification Guide to <i className="text-cyan-400 font-normal print:text-black">{guide.guide_metadata.target_taxon}</i>
         </h2>
-        <div className="flex items-center justify-center gap-2 text-slate-400 font-medium">
+        <div className="flex items-center justify-center gap-2 text-slate-400 font-medium mb-4">
            <MapPin size={18} />
            {guide.guide_metadata.target_locality}
         </div>
-      </div>
 
-      {/* Verification Summary */}
-      <div className="bg-cyan-950/20 border border-cyan-900/50 p-4 rounded-xl flex items-start gap-4 text-sm text-cyan-200/90 shadow-inner">
-         <ShieldCheck size={20} className="text-cyan-500 shrink-0 mt-0.5" />
-         <p>{guide.guide_metadata.verification_summary}</p>
+        <div className="flex flex-wrap items-center justify-center gap-3 print:hidden">
+          <ShareButton />
+          <CopyTextButton 
+            text={formatStructuredGuideAsMarkdown(guide)} 
+            label="Copy Guide Markdown" 
+            title="Copy the entire Dichotomous Key and Diagnostic species profiles as Markdown" 
+          />
+          <PrintPDFButton label="Export / Print PDF" />
+        </div>
       </div>
 
       {/* Overview */}
