@@ -25,9 +25,21 @@ export function SingleResult({ profile, sources, onNavigate }: SingleResultProps
             </CrossLink>
           </span>
         </h2>
-        <div className="text-xl text-cyan-400 font-medium mb-3">
+        <div className="text-xl text-cyan-400 font-medium mb-3 flex items-center justify-center flex-wrap gap-2">
           {profile.commonName}
-          {profile.localityContext && <span className="ml-2 text-slate-400 text-lg font-normal">({profile.localityContext})</span>}
+          {profile.localityContext && (
+            <span className="text-slate-400 text-lg font-normal flex items-center gap-2">
+              <span>({profile.localityContext})</span>
+              <button
+                onClick={() => onNavigate({ module: 'localities', query: profile.localityContext })}
+                className="text-xs px-2 py-1 rounded-md bg-slate-800 hover:bg-cyan-900/50 hover:text-cyan-400 border border-slate-700 hover:border-cyan-700/50 transition-colors flex items-center gap-1"
+                title={`Explore ${profile.localityContext} locality profile`}
+              >
+                <Map size={12} />
+                Explore Region
+              </button>
+            </span>
+          )}
         </div>
 
         {profile.synonyms && profile.synonyms.length > 0 && (
@@ -86,6 +98,18 @@ export function SingleResult({ profile, sources, onNavigate }: SingleResultProps
           className="prose-p:text-lg prose-p:text-slate-200 prose-p:leading-relaxed prose-p:font-medium prose-p:m-0" 
         />
       </InfoCard>
+
+      <div className="flex justify-center !mt-4 mb-8">
+        <button
+          onClick={() => onNavigate({ module: 'guide', query: profile.scientificName, locality: profile.localityContext })}
+          className="flex items-center gap-2 px-5 py-2.5 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 rounded-xl border border-indigo-500/20 transition-all font-medium"
+        >
+          <BookOpen className="w-5 h-5" />
+          {profile.localityContext 
+            ? `Generate Dichotomous Key for ${profile.localityContext}` 
+            : `Generate ID Guide for ${profile.scientificName}`}
+        </button>
+      </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         <div className="lg:col-span-8 space-y-6">

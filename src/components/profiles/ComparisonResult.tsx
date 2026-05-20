@@ -22,7 +22,15 @@ export function ComparisonResult({ profile, sources, onNavigate }: ComparisonRes
         <div className="text-center -mb-2">
           <p className="inline-block px-4 py-2 bg-slate-900/50 rounded-full text-slate-300 border border-slate-800/50 font-medium">
             <MapPin className="w-4 h-4 inline-block mr-2 -mt-0.5 text-cyan-500" />
-            Geographic Context: <span className="text-white">{profile.localityContext}</span>
+            Geographic Context: <span className="text-white mr-2">{profile.localityContext}</span>
+            <button
+               onClick={() => onNavigate({ module: 'localities', query: profile.localityContext })}
+               className="text-xs px-2 py-1 rounded-full bg-cyan-950/50 hover:bg-cyan-900 text-cyan-400 border border-cyan-900/50 hover:border-cyan-700 transition-colors inline-flex items-center gap-1"
+               title={`Explore ${profile.localityContext} locality profile`}
+            >
+               <MapPin size={12} />
+               Explore
+            </button>
           </p>
         </div>
       )}

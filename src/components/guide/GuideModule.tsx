@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { BookOpen, Code2, Map } from 'lucide-react';
 import { InputPanel } from './InputPanel';
 import { ResultPanel } from './ResultPanel';
@@ -10,9 +10,11 @@ import { SAMPLE_DATA } from '../../constants';
 
 interface GuideModuleProps {
   onNavigate?: (target: NavigationTarget) => void;
+  initialTaxon?: string;
+  initialLocality?: string;
 }
 
-export function GuideModule({ onNavigate }: GuideModuleProps) {
+export function GuideModule({ onNavigate, initialTaxon, initialLocality }: GuideModuleProps) {
   const [activeTab, setActiveTab] = useState<'custom' | 'builder'>('builder');
 
   // Custom Prompt state
@@ -26,6 +28,18 @@ export function GuideModule({ onNavigate }: GuideModuleProps) {
   const [useSearch, setUseSearch] = useState<boolean>(true);
   const [builderStatus, setBuilderStatus] = useState<AppStatus>(AppStatus.IDLE);
   const [builderResult, setBuilderResult] = useState<{result: GeneratedGuideStructured, sources: any[]} | null>(null);
+
+  useEffect(() => {
+    if (initialTaxon) {
+      setActiveTab('builder');
+      setTaxon(initialTaxon);
+      if (initialLocality) {
+        setLocality(initialLocality);
+      }
+      setBuilderStatus(AppStatus.IDLE);
+      setBuilderResult(null);
+    }
+  }, [initialTaxon, initialLocality]);
 
   const handleGenerateCustom = useCallback(async () => {
     if (!input.trim()) return;

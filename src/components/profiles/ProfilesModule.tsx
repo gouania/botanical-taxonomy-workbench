@@ -39,28 +39,31 @@ export function ProfilesModule({
   useEffect(() => {
     if (initialQuery) {
       if (initialMode === 'single') {
+        setLocality('');
         setSingleQuery(initialQuery);
-        handleSingleSearch(initialQuery);
+        handleSingleSearch(initialQuery, true);
       } else {
         // Handle compare pre-fill if needed, though usually it's single
       }
     }
   }, [initialQuery, initialMode]);
 
-  const handleSingleSearch = async (query: string) => {
+  const handleSingleSearch = async (query: string, clearLoc: boolean = false) => {
     if (!query.trim()) return;
     setIsLoading(true);
     setError(null);
     setSingleResult(null);
 
+    const activeLocality = clearLoc ? '' : locality;
+
     try {
-      const cacheKey = `profiles_single_${query.toLowerCase()}_${locality.toLowerCase()}`;
+      const cacheKey = `profiles_single_${query.toLowerCase()}_${activeLocality.toLowerCase()}`;
       const cached = cacheService.get<{ profile: TaxonProfile; sources: any[] }>(cacheKey);
 
       if (cached) {
         setSingleResult(cached);
       } else {
-        const { result, sources } = await geminiService.analyzeSingleTaxon(query, locality || undefined);
+        const { result, sources } = await geminiService.analyzeSingleTaxon(query, activeLocality || undefined);
         setSingleResult({ profile: result, sources });
         cacheService.set(cacheKey, { profile: result, sources });
       }
@@ -183,9 +186,17 @@ export function ProfilesModule({
                  onChange={(e) => setLocality(e.target.value)}
                  onKeyDown={(e) => e.key === 'Enter' && handleSingleSearch(singleQuery)}
                  placeholder="Locality context (Optional, e.g., 'California', 'UK')"
-                 className="w-full bg-slate-900/30 border border-slate-700/30 rounded-xl py-3 pl-12 pr-4 text-white text-sm placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-cyan-500/30 transition-all font-sans shadow-inner"
+                 className="w-full bg-slate-900/30 border border-slate-700/30 rounded-xl py-3 pl-12 pr-10 text-white text-sm placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-cyan-500/30 transition-all font-sans shadow-inner"
                  disabled={isLoading}
                />
+               {locality && (
+                 <button
+                   onClick={() => setLocality('')}
+                   className="absolute right-4 text-slate-400 hover:text-slate-200 transition-colors"
+                 >
+                   <X size={16} />
+                 </button>
+               )}
             </div>
 
             {!singleResult && !isLoading && (
@@ -239,9 +250,17 @@ export function ProfilesModule({
                  onChange={(e) => setLocality(e.target.value)}
                  onKeyDown={(e) => e.key === 'Enter' && handleCompareSearch()}
                  placeholder="Locality context (Optional, e.g., 'California', 'UK')"
-                 className="w-full bg-slate-800/30 border border-slate-700/30 rounded-xl py-3 pl-12 pr-4 text-white text-sm placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-cyan-500/30 transition-all font-sans"
+                 className="w-full bg-slate-800/30 border border-slate-700/30 rounded-xl py-3 pl-12 pr-10 text-white text-sm placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-cyan-500/30 transition-all font-sans"
                  disabled={isLoading}
                />
+               {locality && (
+                 <button
+                   onClick={() => setLocality('')}
+                   className="absolute right-4 text-slate-400 hover:text-slate-200 transition-colors"
+                 >
+                   <X size={16} />
+                 </button>
+               )}
             </div>
 
             <div className="flex items-center justify-between pt-2">

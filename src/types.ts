@@ -4,6 +4,7 @@ export type NavigationTarget = {
   module: ModuleType;
   query?: string;
   mode?: 'single' | 'compare';
+  locality?: string;
 };
 
 export interface GroundingSource {

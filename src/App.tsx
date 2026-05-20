@@ -131,7 +131,7 @@ export default function App() {
                 <span>Botanical Taxonomy Workbench</span>
               </h1>
               <p className="text-xl text-slate-400 font-light leading-relaxed max-w-3xl mx-auto">
-                Your unified biological reference workbench. Analyze taxa, identify specimens, and explore botanical authorities.
+                Your unified biological reference workbench. Analyze taxa, identify specimens, generate dichotomous keys, and explore ecosystem localities.
               </p>
             </div>
 
@@ -239,7 +239,11 @@ export default function App() {
         </div>
 
         <div className={activeModule === 'guide' ? 'block' : 'hidden'}>
-          <GuideModule onNavigate={handleNavigate} />
+          <GuideModule 
+            onNavigate={handleNavigate} 
+            initialTaxon={navigationTarget?.module === 'guide' ? navigationTarget.query : undefined}
+            initialLocality={navigationTarget?.module === 'guide' ? navigationTarget.locality : undefined}
+          />
         </div>
 
         <div className={activeModule === 'localities' ? 'block' : 'hidden'}>
