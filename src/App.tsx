@@ -57,7 +57,7 @@ export default function App() {
             <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-cyan-500 to-teal-600 flex items-center justify-center shadow-lg group-hover:shadow-cyan-500/25 transition-all">
               <Leaf size={18} className="text-white" />
             </div>
-            <span className="font-display font-bold text-xl tracking-tight">Botanical Taxonomy Workbench</span>
+            <span className="font-display font-bold text-xl tracking-tight">Taxonomy Workbench</span>
           </button>
 
           <nav className="hidden md:flex items-center gap-1 bg-slate-900/50 p-1 rounded-xl border border-slate-800/50">
@@ -128,7 +128,7 @@ export default function App() {
                 <div className="inline-flex items-center justify-center w-10 h-10 sm:w-12 sm:h-12 md:w-16 md:h-16 rounded-2xl bg-gradient-to-br from-cyan-500/20 to-teal-600/20 border border-cyan-500/30 shadow-[0_0_30px_rgba(6,182,212,0.15)] shrink-0">
                   <Leaf className="w-5 h-5 sm:w-6 sm:h-6 md:w-8 md:h-8 text-cyan-400" />
                 </div>
-                <span>Botanical Taxonomy Workbench</span>
+                <span>Taxonomy Workbench</span>
               </h1>
               <p className="text-xl text-slate-400 font-light leading-relaxed max-w-3xl mx-auto">
                 Your unified biological reference workbench. Analyze taxa, identify specimens, generate dichotomous keys, and explore ecosystem localities.
@@ -307,7 +307,7 @@ export default function App() {
 
       {/* Footer */}
       <footer className="bg-slate-950 border-t border-slate-900 py-8 text-center text-slate-500 text-sm print:hidden mb-16 md:mb-0">
-        <p className="mb-2">Botanical Taxonomy Workbench Beta &bull; Developed by Daniel Cahen</p>
+        <p className="mb-2">Taxonomy Workbench Beta &bull; Developed by Daniel Cahen</p>
         <p className="mb-4 text-xs text-slate-600">Content generated using Gemini 3 Flash</p>
         <p className="text-xs max-w-2xl mx-auto px-4">
           Disclaimer: This tool uses AI to generate taxonomic information. While grounded in search results,
