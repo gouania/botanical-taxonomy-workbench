@@ -211,17 +211,18 @@ export const generateStructuredTaxonGuide = async (taxon: string, locality: stri
       const prompt = `You are an expert plant taxonomist and botanical author. Your task is to generate a highly accurate, region-specific identification guide and dichotomous key based on a provided Taxon and Locality.
 
 CRITICAL INSTRUCTION - USE SEARCH GROUNDING:
-Before generating the guide, you MUST use your search capabilities to query authoritative botanical databases, regional floras, and checklists (e.g., GBIF, SEINet, Flora of North America, local university herbaria) to determine EXACTLY which species of the requested ${taxon} are documented to occur natively or are naturalized in the requested ${locality}. Do not include species that do not occur in this specific region.
+Before generating the guide, you MUST use your search capabilities to query authoritative botanical databases, regional floras, and checklists (e.g., GBIF, SEINet, Flora of North America, local university herbaria) to determine which species of the requested ${taxon} are documented to occur natively or are naturalized in the requested ${locality}.
 
 Once you have established the verified regional species list, generate the guide following these rules:
-1. Provide a brief overview of the taxon's ecological role or general characteristics in the specified locality.
-2. Create a strictly dichotomous key to identify only the verified local species. Use contrasting, reliable morphological characters.
-3. Provide brief diagnostic profiles for each included species.
+1. Limit your search and final selection to the top 4-6 most common, standard, or representative local species in that region. If there are fewer than 4 species present, include all of them. This keeps the guide highly accurate, focused, and fast to generate.
+2. Provide a brief overview of the taxon's ecological role or general characteristics in the specified locality.
+3. Create a strictly dichotomous key to identify only these selected 4-6 local species. Use contrasting, reliable morphological characters.
+4. Provide brief diagnostic profiles for each of the selected species.
 
 You MUST output your response strictly as a JSON object matching the provided schema.`;
 
       const response = await ai.models.generateContent({
-        model: 'gemini-flash-latest',
+        model: 'gemini-3.5-flash',
         contents: [
           {
             role: 'user',
@@ -230,7 +231,7 @@ You MUST output your response strictly as a JSON object matching the provided sc
         ],
         config: {
           temperature: 0.1,
-          ...getThinkingConfig('gemini-flash-latest', ThinkingLevel.LOW),
+          ...getThinkingConfig('gemini-3.5-flash', ThinkingLevel.MINIMAL),
           tools: useSearch ? [{ googleSearch: {} }] : undefined,
           responseMimeType: 'application/json',
           responseSchema: {
@@ -371,11 +372,11 @@ STRICT STRUCTURAL RULES:
 
       try {
         const response = await ai.models.generateContent({
-          model: 'gemini-flash-latest',
+          model: 'gemini-3.5-flash',
           contents: prompt,
           config: {
             temperature: 0.1,
-            ...getThinkingConfig('gemini-flash-latest', ThinkingLevel.MINIMAL),
+            ...getThinkingConfig('gemini-3.5-flash', ThinkingLevel.MINIMAL),
             tools: [{ googleSearch: {} }],
             responseMimeType: 'application/json',
             responseSchema: {
@@ -438,11 +439,11 @@ STRICT STRUCTURAL RULES:
 
       try {
         const response = await ai.models.generateContent({
-          model: 'gemini-flash-latest',
+          model: 'gemini-3.5-flash',
           contents: prompt,
           config: {
             temperature: 0.1,
-            ...getThinkingConfig('gemini-flash-latest', ThinkingLevel.MINIMAL),
+            ...getThinkingConfig('gemini-3.5-flash', ThinkingLevel.MINIMAL),
             tools: [{ googleSearch: {} }],
             responseMimeType: 'application/json',
             responseSchema: {
@@ -567,7 +568,7 @@ STRICT STRUCTURAL RULES:
       const ai = getGenAI();
       try {
         const response = await ai.models.generateContent({
-          model: 'gemini-flash-latest',
+          model: 'gemini-3.5-flash',
           contents: `Identify the most likely plant family based on the following:
 Characters: ${characters.join(', ')}
 Notes: ${notes}
@@ -575,7 +576,7 @@ Location: ${location}
 Suspected Families: ${suspectedFamilies}`,
           config: {
             temperature: 0.1,
-            ...getThinkingConfig('gemini-flash-latest', ThinkingLevel.MINIMAL),
+            ...getThinkingConfig('gemini-3.5-flash', ThinkingLevel.MINIMAL),
             tools: [{ googleSearch: {} }],
             responseMimeType: 'application/json',
             responseSchema: {
@@ -649,12 +650,12 @@ Suspected Families: ${suspectedFamilies}`,
       const ai = getGenAI();
       try {
         const response = await ai.models.generateContent({
-          model: 'gemini-flash-latest',
+          model: 'gemini-3.5-flash',
           contents: `Given these selected characters: ${selectedCharacters.join(', ')}.
 Suggest the top 3 most discriminating characters to try next from this list: ${availableCharacters.join(', ')}.`,
           config: {
             temperature: 0.1,
-            ...getThinkingConfig('gemini-flash-latest', ThinkingLevel.MINIMAL),
+            ...getThinkingConfig('gemini-3.5-flash', ThinkingLevel.MINIMAL),
             responseMimeType: 'application/json',
             responseSchema: {
               type: Type.ARRAY,
@@ -682,11 +683,11 @@ Suggest the top 3 most discriminating characters to try next from this list: ${a
       const ai = getGenAI();
       try {
         const response = await ai.models.generateContent({
-          model: 'gemini-flash-latest',
+          model: 'gemini-3.5-flash',
           contents: `Provide a concise botanical definition for the morphological character: "${characterLabel}".`,
           config: { 
             temperature: 0.1,
-            ...getThinkingConfig('gemini-flash-latest', ThinkingLevel.MINIMAL)
+            ...getThinkingConfig('gemini-3.5-flash', ThinkingLevel.MINIMAL)
           },
         });
         return response.text || '';
@@ -700,14 +701,14 @@ Suggest the top 3 most discriminating characters to try next from this list: ${a
       const ai = getGenAI();
       try {
         const response = await ai.models.generateContent({
-          model: 'gemini-flash-latest',
+          model: 'gemini-3.5-flash',
           contents: `Look up botanical taxonomic author: "${query}". Provide a rich biographical and bibliographic profile. 
           
 CRITICAL INSTRUCTION TO PREVENT HALLUCINATIONS:
 For the 'taxaDescribed' field, you MUST rigorously verify that the author is the original describing authority for the taxa you list. Do not guess or hallucinate taxa. Use the googleSearch tool to query reliable botanical databases (like IPNI, POWO, Tropicos, or Wikipedia) to confirm the author abbreviation matches the taxon's authority. If you cannot confidently verify a taxon was described by this author, DO NOT include it.`,
           config: {
             temperature: 0.1,
-            ...getThinkingConfig('gemini-flash-latest', ThinkingLevel.MINIMAL),
+            ...getThinkingConfig('gemini-3.5-flash', ThinkingLevel.MINIMAL),
             tools: [{ googleSearch: {} }],
             responseMimeType: 'application/json',
             responseSchema: {
@@ -811,7 +812,7 @@ For the 'taxaDescribed' field, you MUST rigorously verify that the author is the
       const ai = getGenAI();
       try {
         const response = await ai.models.generateContent({
-          model: 'gemini-flash-latest',
+          model: 'gemini-3.5-flash',
           contents: `
 You are an expert field botanist, plant taxonomist, and biogeographer. Your task is to generate a highly accurate, scientifically rigorous "Locality Profile" based on a user-provided location name or GPS coordinates: "${locationInput}"
 
@@ -823,7 +824,7 @@ You MUST output your response strictly to the JSON schema.
 `,
           config: {
             temperature: 0.1,
-            ...getThinkingConfig('gemini-flash-latest', ThinkingLevel.MINIMAL),
+            ...getThinkingConfig('gemini-3.5-flash', ThinkingLevel.MINIMAL),
             tools: [{ googleSearch: {} }],
             responseMimeType: "application/json",
             responseSchema: {

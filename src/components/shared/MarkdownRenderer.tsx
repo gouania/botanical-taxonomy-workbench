@@ -9,7 +9,10 @@ interface MarkdownRendererProps {
 export function MarkdownRenderer({ content, className = '' }: MarkdownRendererProps) {
   if (!content) return null;
 
-  const html = marked.parse(content, { async: false, breaks: true }) as string;
+  // Replace literal '\n' sequences (backslash followed by 'n') with real newlines
+  const processedContent = String(content).replace(/\\n/g, '\n');
+
+  const html = marked.parse(processedContent, { async: false, breaks: true }) as string;
 
   return (
     <div

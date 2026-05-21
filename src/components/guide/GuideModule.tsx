@@ -28,6 +28,7 @@ export function GuideModule({ onNavigate, initialTaxon, initialLocality }: Guide
   const [useSearch, setUseSearch] = useState<boolean>(true);
   const [builderStatus, setBuilderStatus] = useState<AppStatus>(AppStatus.IDLE);
   const [builderResult, setBuilderResult] = useState<{result: GeneratedGuideStructured, sources: any[]} | null>(null);
+  const [builderError, setBuilderError] = useState<string | null>(null);
 
   useEffect(() => {
     if (initialTaxon) {
@@ -38,6 +39,7 @@ export function GuideModule({ onNavigate, initialTaxon, initialLocality }: Guide
       }
       setBuilderStatus(AppStatus.IDLE);
       setBuilderResult(null);
+      setBuilderError(null);
     }
   }, [initialTaxon, initialLocality]);
 
@@ -70,13 +72,15 @@ export function GuideModule({ onNavigate, initialTaxon, initialLocality }: Guide
     if (!taxon.trim() || !locality.trim()) return;
     setBuilderStatus(AppStatus.LOADING);
     setBuilderResult(null);
+    setBuilderError(null);
 
     try {
       const res = await generateStructuredTaxonGuide(taxon, locality, useSearch);
       setBuilderResult(res);
       setBuilderStatus(AppStatus.SUCCESS);
-    } catch (error) {
+    } catch (error: any) {
       console.error(error);
+      setBuilderError(error?.message || String(error));
       setBuilderStatus(AppStatus.ERROR);
     }
   }, [taxon, locality, useSearch]);
@@ -86,6 +90,7 @@ export function GuideModule({ onNavigate, initialTaxon, initialLocality }: Guide
     setLocality('');
     setBuilderStatus(AppStatus.IDLE);
     setBuilderResult(null);
+    setBuilderError(null);
   }, []);
 
   const currentStatus = activeTab === 'custom' ? customStatus : builderStatus;
@@ -175,6 +180,7 @@ export function GuideModule({ onNavigate, initialTaxon, initialLocality }: Guide
               guide={builderResult?.result || null}
               sources={builderResult?.sources}
               onNavigate={onNavigate}
+              error={builderError}
             />
           )}
         </div>
