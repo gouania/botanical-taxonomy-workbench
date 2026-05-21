@@ -28,6 +28,94 @@ function getGenAI(): GoogleGenAI {
   return new GoogleGenAI({ apiKey });
 }
 
+function getThinkingConfig(model: string, level: ThinkingLevel): { thinkingConfig?: { thinkingLevel: ThinkingLevel } } {
+  // Thinking levels are only supported for Gemini 3 series models (e.g. gemini-3.5-flash, gemini-3.1-pro-preview)
+  if (model.includes('gemini-3')) {
+    return { thinkingConfig: { thinkingLevel: level } };
+  }
+  return {};
+}
+
+function safeJsonParse<T>(text: string, fallback: any = {}): T {
+  if (!text) return fallback as T;
+  let cleaned = text.trim();
+  
+  if (cleaned.startsWith('```')) {
+    cleaned = cleaned.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
+  }
+  cleaned = cleaned.trim();
+
+  try {
+    return JSON.parse(cleaned) as T;
+  } catch (error) {
+    console.warn("Standard JSON.parse failed, attempting extraction/correction on:", cleaned);
+    
+    // Attempt 1: Extract anything between the first '{' and the last '}'
+    const firstBrace = cleaned.indexOf('{');
+    const lastBrace = cleaned.lastIndexOf('}');
+    if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+      const extracted = cleaned.substring(firstBrace, lastBrace + 1);
+      try {
+        return JSON.parse(extracted) as T;
+      } catch (innerError) {
+        // Attempt 2: Simple cleanup of common trailing comma issue or control chars
+        const simplified = extracted
+          .replace(/,\s*([}\]])/g, '$1')
+          .replace(/[\u0000-\u001F\u007F-\u009F]/g, " ");
+        try {
+          return JSON.parse(simplified) as T;
+        } catch (finalError) {
+          // Attempt 3: If it's cut off, try to force-close open brackets/curly braces
+          // Let's count open vs close
+          let openBraces = 0;
+          let openBrackets = 0;
+          let temp = "";
+          for (let i = 0; i < extracted.length; i++) {
+            const char = extracted[i];
+            if (char === '{') openBraces++;
+            if (char === '}') openBraces--;
+            if (char === '[') openBrackets++;
+            if (char === ']') openBrackets--;
+            temp += char;
+          }
+          // If we have open braces/brackets, try adding closing ones
+          if (openBraces > 0 || openBrackets > 0) {
+            let repaired = temp;
+            repaired = repaired.replace(/,\s*$/, ''); // clean potential trailing comma at current end
+            // Remove incomplete keys or values if they are at the end, e.g. "key":. or "key":
+            repaired = repaired.replace(/"\w+"\s*:\s*(?:\.|\?|)?\s*$/, '');
+            while (openBrackets > 0) {
+              repaired += ']';
+              openBrackets--;
+            }
+            while (openBraces > 0) {
+              repaired += '}';
+              openBraces--;
+            }
+            try {
+              return JSON.parse(repaired) as T;
+            } catch (repairError) {
+              console.error("JSON repair failed:", repairError);
+            }
+          }
+        }
+      }
+    }
+    
+    // Attempt 4: Extract arrays
+    const firstBracket = cleaned.indexOf('[');
+    const lastBracket = cleaned.lastIndexOf(']');
+    if (firstBracket !== -1 && lastBracket !== -1 && lastBracket > firstBracket) {
+      const extracted = cleaned.substring(firstBracket, lastBracket + 1);
+      try {
+        return JSON.parse(extracted) as T;
+      } catch {}
+    }
+
+    throw error;
+  }
+}
+
 function extractSources(response: any): GroundingSource[] {
   const chunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
   return chunks
@@ -93,7 +181,7 @@ export const generateTaxonGuide = async (inputText: string): Promise<string> => 
         config: {
           systemInstruction: SYSTEM_PROMPT,
           temperature: 0.2,
-          thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
+          ...getThinkingConfig(GEMINI_MODEL, ThinkingLevel.LOW),
         },
         contents: [
           {
@@ -133,7 +221,7 @@ Once you have established the verified regional species list, generate the guide
 You MUST output your response strictly as a JSON object matching the provided schema.`;
 
       const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
+        model: 'gemini-flash-latest',
         contents: [
           {
             role: 'user',
@@ -142,6 +230,7 @@ You MUST output your response strictly as a JSON object matching the provided sc
         ],
         config: {
           temperature: 0.1,
+          ...getThinkingConfig('gemini-flash-latest', ThinkingLevel.LOW),
           tools: useSearch ? [{ googleSearch: {} }] : undefined,
           responseMimeType: 'application/json',
           responseSchema: {
@@ -202,7 +291,7 @@ You MUST output your response strictly as a JSON object matching the provided sc
         }
       });
 
-      const result = JSON.parse(response.text || '{}') as GeneratedGuideStructured;
+      const result = safeJsonParse<GeneratedGuideStructured>(response.text || '{}');
       const sources = extractSources(response);
       return { result, sources };
 
@@ -282,11 +371,11 @@ STRICT STRUCTURAL RULES:
 
       try {
         const response = await ai.models.generateContent({
-          model: 'gemini-3-flash-preview',
+          model: 'gemini-flash-latest',
           contents: prompt,
           config: {
             temperature: 0.1,
-            thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
+            ...getThinkingConfig('gemini-flash-latest', ThinkingLevel.MINIMAL),
             tools: [{ googleSearch: {} }],
             responseMimeType: 'application/json',
             responseSchema: {
@@ -318,7 +407,7 @@ STRICT STRUCTURAL RULES:
           },
         });
 
-        const result = JSON.parse(response.text || '{}') as TaxonProfile;
+        const result = safeJsonParse<TaxonProfile>(response.text || '{}');
         if (locality) result.localityContext = locality;
         const sources = extractSources(response);
         return { result, sources };
@@ -349,11 +438,11 @@ STRICT STRUCTURAL RULES:
 
       try {
         const response = await ai.models.generateContent({
-          model: 'gemini-3-flash-preview',
+          model: 'gemini-flash-latest',
           contents: prompt,
           config: {
             temperature: 0.1,
-            thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
+            ...getThinkingConfig('gemini-flash-latest', ThinkingLevel.MINIMAL),
             tools: [{ googleSearch: {} }],
             responseMimeType: 'application/json',
             responseSchema: {
@@ -457,7 +546,7 @@ STRICT STRUCTURAL RULES:
           },
         });
 
-        const result = JSON.parse(response.text || '{}') as ComparisonProfile;
+        const result = safeJsonParse<ComparisonProfile>(response.text || '{}');
         if (locality) result.localityContext = locality;
         const sources = extractSources(response);
         return { result, sources };
@@ -478,7 +567,7 @@ STRICT STRUCTURAL RULES:
       const ai = getGenAI();
       try {
         const response = await ai.models.generateContent({
-          model: 'gemini-3-flash-preview',
+          model: 'gemini-flash-latest',
           contents: `Identify the most likely plant family based on the following:
 Characters: ${characters.join(', ')}
 Notes: ${notes}
@@ -486,6 +575,7 @@ Location: ${location}
 Suspected Families: ${suspectedFamilies}`,
           config: {
             temperature: 0.1,
+            ...getThinkingConfig('gemini-flash-latest', ThinkingLevel.MINIMAL),
             tools: [{ googleSearch: {} }],
             responseMimeType: 'application/json',
             responseSchema: {
@@ -541,7 +631,7 @@ Suspected Families: ${suspectedFamilies}`,
           },
         });
 
-        const result = JSON.parse(response.text || '{}') as IdentifyResult;
+        const result = safeJsonParse<IdentifyResult>(response.text || '{}');
         const sources = extractSources(response);
         return { result, sources };
       } catch (error) {
@@ -559,11 +649,12 @@ Suspected Families: ${suspectedFamilies}`,
       const ai = getGenAI();
       try {
         const response = await ai.models.generateContent({
-          model: 'gemini-3-flash-preview',
+          model: 'gemini-flash-latest',
           contents: `Given these selected characters: ${selectedCharacters.join(', ')}.
 Suggest the top 3 most discriminating characters to try next from this list: ${availableCharacters.join(', ')}.`,
           config: {
             temperature: 0.1,
+            ...getThinkingConfig('gemini-flash-latest', ThinkingLevel.MINIMAL),
             responseMimeType: 'application/json',
             responseSchema: {
               type: Type.ARRAY,
@@ -578,7 +669,7 @@ Suggest the top 3 most discriminating characters to try next from this list: ${a
           },
         });
 
-        return JSON.parse(response.text || '[]');
+        return safeJsonParse<any[]>(response.text || '[]', []);
       } catch (error) {
         console.error("Gemini API Error in suggestNextCharacters:", error);
         throw new Error(cleanErrorMessage(error));
@@ -591,9 +682,12 @@ Suggest the top 3 most discriminating characters to try next from this list: ${a
       const ai = getGenAI();
       try {
         const response = await ai.models.generateContent({
-          model: 'gemini-3-flash-preview',
+          model: 'gemini-flash-latest',
           contents: `Provide a concise botanical definition for the morphological character: "${characterLabel}".`,
-          config: { temperature: 0.1 },
+          config: { 
+            temperature: 0.1,
+            ...getThinkingConfig('gemini-flash-latest', ThinkingLevel.MINIMAL)
+          },
         });
         return response.text || '';
       } catch (error) {
@@ -606,14 +700,14 @@ Suggest the top 3 most discriminating characters to try next from this list: ${a
       const ai = getGenAI();
       try {
         const response = await ai.models.generateContent({
-          model: 'gemini-3-flash-preview',
+          model: 'gemini-flash-latest',
           contents: `Look up botanical taxonomic author: "${query}". Provide a rich biographical and bibliographic profile. 
           
 CRITICAL INSTRUCTION TO PREVENT HALLUCINATIONS:
 For the 'taxaDescribed' field, you MUST rigorously verify that the author is the original describing authority for the taxa you list. Do not guess or hallucinate taxa. Use the googleSearch tool to query reliable botanical databases (like IPNI, POWO, Tropicos, or Wikipedia) to confirm the author abbreviation matches the taxon's authority. If you cannot confidently verify a taxon was described by this author, DO NOT include it.`,
           config: {
             temperature: 0.1,
-            thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
+            ...getThinkingConfig('gemini-flash-latest', ThinkingLevel.MINIMAL),
             tools: [{ googleSearch: {} }],
             responseMimeType: 'application/json',
             responseSchema: {
@@ -700,7 +794,7 @@ For the 'taxaDescribed' field, you MUST rigorously verify that the author is the
           },
         });
 
-        const result = JSON.parse(response.text || '{}') as AuthorProfile;
+        const result = safeJsonParse<AuthorProfile>(response.text || '{}');
         const sources = extractSources(response);
         return { result, sources };
       } catch (error) {
@@ -717,7 +811,7 @@ For the 'taxaDescribed' field, you MUST rigorously verify that the author is the
       const ai = getGenAI();
       try {
         const response = await ai.models.generateContent({
-          model: "gemini-3-flash-preview",
+          model: 'gemini-flash-latest',
           contents: `
 You are an expert field botanist, plant taxonomist, and biogeographer. Your task is to generate a highly accurate, scientifically rigorous "Locality Profile" based on a user-provided location name or GPS coordinates: "${locationInput}"
 
@@ -729,6 +823,7 @@ You MUST output your response strictly to the JSON schema.
 `,
           config: {
             temperature: 0.1,
+            ...getThinkingConfig('gemini-flash-latest', ThinkingLevel.MINIMAL),
             tools: [{ googleSearch: {} }],
             responseMimeType: "application/json",
             responseSchema: {
@@ -805,7 +900,7 @@ You MUST output your response strictly to the JSON schema.
           },
         });
 
-        const result = JSON.parse(response.text || '{}') as LocalityProfile;
+        const result = safeJsonParse<LocalityProfile>(response.text || '{}');
         const sources = extractSources(response);
         return { result, sources };
       } catch (error) {

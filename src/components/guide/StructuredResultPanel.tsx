@@ -4,7 +4,7 @@ import { Loader2, AlertCircle, ListTree, Info, MapPin } from 'lucide-react';
 import { AppStatus, GeneratedGuideStructured, NavigationTarget } from '../../types';
 import { SourcesBar } from '../shared/SourcesBar';
 import { CrossLink } from '../shared/CrossLink';
-import { ShareButton, CopyTextButton, PrintPDFButton } from '../shared/ExportTools';
+import { CopyTextButton, PrintPDFButton } from '../shared/ExportTools';
 
 interface StructuredResultPanelProps {
   status: AppStatus;
@@ -94,7 +94,6 @@ export function StructuredResultPanel({ status, guide, sources, onNavigate }: St
         </div>
 
         <div className="flex flex-wrap items-center justify-center gap-3 print:hidden">
-          <ShareButton />
           <CopyTextButton 
             text={formatStructuredGuideAsMarkdown(guide)} 
             label="Copy Guide Markdown" 

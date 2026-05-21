@@ -5,7 +5,7 @@ import { CrossLink } from '../shared/CrossLink';
 import { InfoCard } from '../shared/InfoCard';
 import { MarkdownRenderer } from '../shared/MarkdownRenderer';
 import { SourcesBar } from '../shared/SourcesBar';
-import { ShareButton, CopyTextButton, PrintPDFButton } from '../shared/ExportTools';
+import { CopyTextButton, PrintPDFButton } from '../shared/ExportTools';
 
 interface ComparisonResultProps {
   profile: ComparisonProfile;
@@ -70,7 +70,6 @@ export function ComparisonResult({ profile, sources, onNavigate }: ComparisonRes
         )}
         
         <div className="flex flex-wrap items-center justify-center gap-3 print:hidden">
-          <ShareButton />
           <CopyTextButton 
             text={formatCompareAsMarkdown(profile)} 
             label="Copy Comparison" 

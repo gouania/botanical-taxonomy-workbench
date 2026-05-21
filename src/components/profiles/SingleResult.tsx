@@ -6,7 +6,7 @@ import { InfoCard } from '../shared/InfoCard';
 import { MarkdownRenderer } from '../shared/MarkdownRenderer';
 import { SourcesBar } from '../shared/SourcesBar';
 import { SimilarSpeciesCard } from './SimilarSpeciesCard';
-import { ShareButton, CopyTextButton, PrintPDFButton } from '../shared/ExportTools';
+import { CopyTextButton, PrintPDFButton } from '../shared/ExportTools';
 
 interface SingleResultProps {
   profile: TaxonProfile;
@@ -122,7 +122,6 @@ export function SingleResult({ profile, sources, onNavigate }: SingleResultProps
         )}
 
         <div className="flex flex-wrap items-center justify-center gap-3 mt-4 print:hidden">
-          <ShareButton />
           <CopyTextButton 
             text={formatProfileAsMarkdown(profile)} 
             label="Copy Markdown" 

@@ -4,7 +4,7 @@ import { InfoCard } from '../shared/InfoCard';
 import { MapPin, Thermometer, Droplets, Mountain, Leaf, ShieldAlert, History, Globe2, Calendar, MapIcon, Info } from 'lucide-react';
 import { CrossLink } from '../shared/CrossLink';
 import { SourcesBar } from '../shared/SourcesBar';
-import { ShareButton, CopyTextButton, PrintPDFButton } from '../shared/ExportTools';
+import { CopyTextButton, PrintPDFButton } from '../shared/ExportTools';
 
 interface LocalityDashboardProps {
   profile: LocalityProfile;
@@ -57,7 +57,6 @@ export function LocalityDashboard({ profile, sources, onNavigate }: LocalityDash
         </div>
 
         <div className="flex flex-wrap items-center justify-center gap-3 print:hidden">
-          <ShareButton />
           <CopyTextButton 
             text={formatLocalityAsMarkdown(profile)} 
             label="Copy Locality Data" 

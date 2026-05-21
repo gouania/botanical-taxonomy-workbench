@@ -2,7 +2,7 @@ import React from 'react';
 import Markdown from 'react-markdown';
 import { Loader2, AlertCircle, FileText } from 'lucide-react';
 import { AppStatus } from '../../types';
-import { ShareButton, CopyTextButton, PrintPDFButton } from '../shared/ExportTools';
+import { CopyTextButton, PrintPDFButton } from '../shared/ExportTools';
 
 interface ResultPanelProps {
   status: AppStatus;
@@ -53,7 +53,6 @@ export function ResultPanel({ status, markdown }: ResultPanelProps) {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-end gap-3 print:hidden">
-        <ShareButton />
         <CopyTextButton 
           text={markdown} 
           label="Copy Markdown" 
